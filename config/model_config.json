@@ -5,7 +5,7 @@
   "vegetation_config": "../config/vegetation_config.json",
   "classifier_ckpt": "../models/multiclass_roi_classifier/best.pt",
   "binary_classifier_ckpt": "../models/binary_roi_classifier/best.pt",
-  "mobile_sam_ckpt": "../models/backbones/mobile_sam_task_decoder_finetuned_20260513_mask_decoder.pt",
+  "mobile_sam_ckpt": "../models/backbones/mobile_sam_image_encoder_merged_20260521.pt",
   "superpoint_ckpt": "../models/matching/superpoint_v1.pth",
   "classifier_device": "cuda:0",
   "binary_classifier_device": "cuda:0",
