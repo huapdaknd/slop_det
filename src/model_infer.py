@@ -12,6 +12,7 @@ import torch
 
 from .classifier import PairBinaryRoiClassifier, PairChangeClassifier
 from .gescf import GeSCF
+from .pair_change_backend import PairChangeSegBackend
 from .veg_infer import VegetationCoverageService
 from .yolo_infer import YoloDetectionService
 
@@ -44,9 +45,19 @@ class DetectorConfig:
     output_root: str
     base_roi_root: str = ""
     vegetation_config: str = ""
+    proposal_backend: str = "gescf"
     classifier_ckpt: str = ""
     binary_classifier_ckpt: str = ""
     mobile_sam_ckpt: str = ""
+    pair_change_checkpoint: str = ""
+    pair_change_device: str = "cuda:0"
+    pair_change_decoder_arch: str = "auto"
+    pair_change_inference_mode: str = "sliding"
+    pair_change_crop_size: int = 1536
+    pair_change_stride: int = 768
+    pair_change_threshold: float = 0.5
+    pair_change_open_kernel: int = 3
+    pair_change_close_kernel: int = 5
     sam_vit_h_ckpt: str = ""
     superpoint_ckpt: str = ""
     classifier_device: str = "auto"
@@ -143,6 +154,7 @@ class OnlineChangeService:
         self.classifier_ckpt = self._resolve_path(config.classifier_ckpt) if config.classifier_ckpt else None
         self.binary_classifier_ckpt = self._resolve_path(config.binary_classifier_ckpt) if config.binary_classifier_ckpt else None
         self.mobile_sam_ckpt = self._resolve_path(config.mobile_sam_ckpt) if config.mobile_sam_ckpt else None
+        self.pair_change_checkpoint = self._resolve_path(config.pair_change_checkpoint) if config.pair_change_checkpoint else None
         self.sam_vit_h_ckpt = self._resolve_path(config.sam_vit_h_ckpt) if config.sam_vit_h_ckpt else None
         self.superpoint_ckpt = self._resolve_path(config.superpoint_ckpt) if config.superpoint_ckpt else None
         self.yolo_config = self._resolve_path(config.yolo_config) if config.yolo_config else None
@@ -222,6 +234,26 @@ class OnlineChangeService:
         return model
 
     def _build_mask_backend(self):
+        backend_name = str(self.config.proposal_backend).strip().lower()
+        if backend_name in {"pair_change_seg", "pair_change", "mobile_sam_pair"}:
+            checkpoint_path = self.pair_change_checkpoint
+            backbone_checkpoint = self.mobile_sam_ckpt
+            if checkpoint_path is None:
+                raise FileNotFoundError("pair_change_checkpoint is required for proposal_backend=pair_change_seg")
+            if backbone_checkpoint is None:
+                raise FileNotFoundError("mobile_sam_ckpt is required for proposal_backend=pair_change_seg")
+            return PairChangeSegBackend(
+                checkpoint_path=checkpoint_path,
+                backbone_checkpoint=backbone_checkpoint,
+                device=self.config.pair_change_device,
+                decoder_arch=self.config.pair_change_decoder_arch,
+                inference_mode=self.config.pair_change_inference_mode,
+                crop_size=self.config.pair_change_crop_size,
+                stride=self.config.pair_change_stride,
+                threshold=self.config.pair_change_threshold,
+                open_kernel=self.config.pair_change_open_kernel,
+                close_kernel=self.config.pair_change_close_kernel,
+            )
         return self._build_gescf()
 
     def _build_classifier(self):
@@ -1262,11 +1294,6 @@ class OnlineChangeService:
 
         base = self._get_single_base(scene_dir)
         mask = self._run_mask(base, current)
-        raw_is_change, raw_change_pixels, raw_change_ratio = self._detect_change(
-            mask,
-            self.config.min_change_pixels,
-            self.config.min_change_ratio,
-        )
 
         if output_dir is None:
             out_dir = self._next_output_dir(scene)
@@ -1285,7 +1312,16 @@ class OnlineChangeService:
 
         base_img = self._read_image_unicode(base, cv2.IMREAD_COLOR)
         current_img = self._read_image_unicode(current, cv2.IMREAD_COLOR)
-        mask_orig = self._unletterbox_mask((mask > 0).astype(np.uint8), (current_img.shape[0], current_img.shape[1]))
+        backend_name = str(self.config.proposal_backend).strip().lower()
+        if backend_name in {"pair_change_seg", "pair_change", "mobile_sam_pair"}:
+            mask_orig = (mask > 0).astype(np.uint8)
+        else:
+            mask_orig = self._unletterbox_mask((mask > 0).astype(np.uint8), (current_img.shape[0], current_img.shape[1]))
+        raw_is_change, raw_change_pixels, raw_change_ratio = self._detect_change(
+            mask_orig,
+            self.config.min_change_pixels,
+            self.config.min_change_ratio,
+        )
         roi_mask = self._load_base_roi_mask(scene, current_img.shape[0], current_img.shape[1])
         if write_mask_image:
             overlay = current_img.copy()
@@ -1312,11 +1348,14 @@ class OnlineChangeService:
         if veg_metrics is not None:
             labelme["vegetation_metrics"] = veg_metrics
 
-        scaled_min_change_pixels = self._scale_min_pixels_for_image_size(
-            min_pixels=self.config.min_change_pixels,
-            source_image_size=mask.size,
-            target_image_size=mask_orig.size,
-        )
+        if backend_name in {"pair_change_seg", "pair_change", "mobile_sam_pair"}:
+            scaled_min_change_pixels = int(self.config.min_change_pixels)
+        else:
+            scaled_min_change_pixels = self._scale_min_pixels_for_image_size(
+                min_pixels=self.config.min_change_pixels,
+                source_image_size=mask.size,
+                target_image_size=mask_orig.size,
+            )
         is_change, change_pixels, change_ratio = self._detect_change_from_exported_shapes(
             labelme=labelme,
             image_size=mask_orig.size,
@@ -1343,7 +1382,7 @@ class OnlineChangeService:
 
         result = {
             "scene": scene,
-            "proposal_backend": "gescf",
+            "proposal_backend": backend_name or "gescf",
             "base_before": str(base),
             "current": str(current),
             "change": int(is_change),
