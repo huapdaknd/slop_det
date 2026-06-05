@@ -1,0 +1,11 @@
+{
+  "data_root": "../base_data",
+  "output_root": "../output",
+  "weights": "../models/vegetation/mobile_sam_finetuned_without_prompt.pt",
+  "device": "cuda:0",
+  "change_threshold_percent": 5.0,
+  "decrease_threshold": 0.1,
+  "increase_threshold": 0.1,
+  "mask_threshold": 0.5,
+  "update_base_on_change": true
+}

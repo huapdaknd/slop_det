@@ -1,0 +1,13 @@
+{
+  "model_path": "../models/yolo/best.pt",
+  "device": "0",
+  "imgsz": 960,
+  "conf": 0.35,
+  "iou": 0.5,
+  "max_det": 300,
+  "class_names": [
+    "rock_fall",
+    "landslide"
+  ]
+}
+

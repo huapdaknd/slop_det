@@ -1,0 +1,155 @@
+from pathlib import Path
+from typing import Dict, Optional
+
+from .diff_yolo_infer import DiffYoloClassificationService
+from .model_infer import OnlineChangeService
+from .veg_infer import VegetationCoverageService
+from .yolo_infer import YoloDetectionService
+
+
+class SlopDetService:
+    """Unified class API for edge, vegetation, and diff+YOLO classification."""
+
+    def __init__(
+        self,
+        cd_config_path: Optional[str] = None,
+        veg_config_path: Optional[str] = None,
+        yolo_config_path: Optional[str] = None,
+    ) -> None:
+        root = Path(__file__).resolve().parents[1]
+        default_cd = root / "config" / "model_config.json"
+        default_veg = root / "config" / "vegetation_config.json"
+        default_yolo = root / "config" / "model_config_yolo.json"
+
+        self.cd_config_path = str(Path(cd_config_path).resolve()) if cd_config_path else str(default_cd.resolve())
+        self.veg_config_path = (
+            str(Path(veg_config_path).resolve()) if veg_config_path else str(default_veg.resolve())
+        )
+        self.yolo_config_path = (
+            str(Path(yolo_config_path).resolve()) if yolo_config_path else str(default_yolo.resolve())
+        )
+        self._cd_service: Optional[OnlineChangeService] = None
+        self._veg_service: Optional[VegetationCoverageService] = None
+        self._yolo_service: Optional[YoloDetectionService] = None
+        self._diff_yolo_service: Optional[DiffYoloClassificationService] = None
+
+    def _get_cd_service(self) -> OnlineChangeService:
+        if self._cd_service is None:
+            self._cd_service = OnlineChangeService.from_config_file(self.cd_config_path)
+        return self._cd_service
+
+    def _get_veg_service(self) -> VegetationCoverageService:
+        if self._veg_service is None:
+            self._veg_service = VegetationCoverageService.from_config_file(self.veg_config_path)
+        return self._veg_service
+
+    def _get_yolo_service(self) -> YoloDetectionService:
+        if self._yolo_service is None:
+            self._yolo_service = YoloDetectionService.from_config_file(self.yolo_config_path)
+        return self._yolo_service
+
+    def _get_diff_yolo_service(
+        self,
+        min_overlap_ratio: float = 0.15,
+        min_overlap_pixels: int = 100,
+    ) -> DiffYoloClassificationService:
+        if self._diff_yolo_service is None:
+            self._diff_yolo_service = DiffYoloClassificationService(
+                cd_service=self._get_cd_service(),
+                yolo_service=self._get_yolo_service(),
+                min_overlap_ratio=min_overlap_ratio,
+                min_overlap_pixels=min_overlap_pixels,
+            )
+        else:
+            self._diff_yolo_service.min_overlap_ratio = float(min_overlap_ratio)
+            self._diff_yolo_service.min_overlap_pixels = int(min_overlap_pixels)
+        return self._diff_yolo_service
+
+    def run(
+        self,
+        scene: str,
+        current: str,
+        update_base: Optional[bool] = None,
+        output_dir: Optional[str] = None,
+        write_base_current: bool = True,
+        write_mask_image: bool = True,
+        min_overlap_ratio: float = 0.15,
+        min_overlap_pixels: int = 100,
+        run_yolo_when_no_change: bool = False,
+    ) -> Dict:
+        """Compatibility entrypoint used by existing integrations.
+
+        The slim runtime's default pipeline is now edge + vegetation metrics +
+        YOLO boxes that overlap the red change mask. The write flags are kept
+        for old callers; this pipeline always writes the four LabelMe files.
+        """
+        _ = (write_base_current, write_mask_image)
+        return self.run_diff_yolo(
+            scene=scene,
+            current=current,
+            output_dir=output_dir,
+            update_base=update_base,
+            min_overlap_ratio=min_overlap_ratio,
+            min_overlap_pixels=min_overlap_pixels,
+            run_yolo_when_no_change=run_yolo_when_no_change,
+        )
+
+    def run_edge(
+        self,
+        scene: str,
+        current: str,
+        update_base: Optional[bool] = None,
+        output_dir: Optional[str] = None,
+        write_base_current: bool = True,
+        write_mask_image: bool = True,
+    ) -> Dict:
+        """Run edge change detection with scene + current image path."""
+        return self._get_cd_service().process(
+            scene=scene,
+            current_path=current,
+            update_base=update_base,
+            output_dir=output_dir,
+            write_base_current=write_base_current,
+            write_mask_image=write_mask_image,
+        )
+
+    def run_vegetation(
+        self,
+        scene: str,
+        current: str,
+        output_dir: Optional[str] = None,
+        update_base: Optional[bool] = None,
+        write_base_current: bool = True,
+        save_debug_images: bool = True,
+    ) -> Dict:
+        """Run vegetation coverage change detection with scene + current image path."""
+        return self._get_veg_service().process(
+            scene=scene,
+            current_path=current,
+            update_base=update_base,
+            output_dir=output_dir,
+            write_base_current=write_base_current,
+            save_debug_images=save_debug_images,
+        )
+
+    def run_diff_yolo(
+        self,
+        scene: str,
+        current: str,
+        output_dir: Optional[str] = None,
+        update_base: Optional[bool] = None,
+        min_overlap_ratio: float = 0.15,
+        min_overlap_pixels: int = 100,
+        run_yolo_when_no_change: bool = False,
+    ) -> Dict:
+        """Run edge first, then write YOLO boxes that overlap red mask regions into mask.json."""
+        return self._get_diff_yolo_service(
+            min_overlap_ratio=min_overlap_ratio,
+            min_overlap_pixels=min_overlap_pixels,
+        ).process(
+            scene=scene,
+            current_path=current,
+            output_dir=output_dir,
+            update_base=update_base,
+            run_yolo_when_no_change=run_yolo_when_no_change,
+        )
