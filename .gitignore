@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vscode/
+
+base_data/
+current_data/
+2026-06-04/
+output*/
+backups/
+*.log
+tmp_*
+
+# CLIP is distributed separately because the checkpoint is about 1.6 GB.
+models/clip/

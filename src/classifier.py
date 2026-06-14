@@ -34,6 +34,7 @@ BINARY_CLASS_NAMES = ["no_change", "change"]
 IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(3, 1, 1)
 IMAGENET_STD = torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(3, 1, 1)
 DEFAULT_MOBILE_SAM_CKPT = str(Path(__file__).resolve().parents[2] / "models" / "backbones" / "mobile_sam.pt")
+DEFAULT_SAM_VIT_H_CKPT = str(Path(__file__).resolve().parents[2] / "models" / "backbones" / "sam_vit_h_4b8939.pth")
 
 
 def normalize_roi_view_mode(view_mode: str) -> str:
@@ -105,6 +106,22 @@ class PairRoiClassifier(nn.Module):
             channels = 256
             self.register_buffer("encoder_mean", sam.pixel_mean.float().clone(), persistent=False)
             self.register_buffer("encoder_std", sam.pixel_std.float().clone(), persistent=False)
+        elif self.encoder_backbone in {"sam_vit_h", "vit_h"}:
+            vendor_root = Path(__file__).resolve().parent / "vendor"
+            if (vendor_root / "segment_anything_model").exists() and str(vendor_root) not in sys.path:
+                sys.path.insert(0, str(vendor_root))
+            from segment_anything_model import sam_model_registry
+
+            ckpt_path = str(encoder_checkpoint or DEFAULT_SAM_VIT_H_CKPT)
+            if not os.path.exists(ckpt_path):
+                raise FileNotFoundError(f"SAM vit-h checkpoint not found: {ckpt_path}")
+
+            sam = sam_model_registry["vit_h"](checkpoint=ckpt_path)
+            self.encoder = sam.image_encoder
+            self.encoder_input_size = int(getattr(self.encoder, "img_size", 1024))
+            channels = 256
+            self.register_buffer("encoder_mean", sam.pixel_mean.float().clone(), persistent=False)
+            self.register_buffer("encoder_std", sam.pixel_std.float().clone(), persistent=False)
         else:
             raise ValueError(f"Unsupported encoder_backbone: {encoder_backbone}")
 
@@ -123,7 +140,7 @@ class PairRoiClassifier(nn.Module):
         )
 
     def encode_images(self, img_batch: torch.Tensor) -> torch.Tensor:
-        if self.encoder_backbone == "mobile_sam_vit_t":
+        if self.encoder_backbone in {"mobile_sam_vit_t", "sam_vit_h", "vit_h"}:
             if self.encoder_input_size > 0 and (
                 img_batch.shape[-2] != self.encoder_input_size or img_batch.shape[-1] != self.encoder_input_size
             ):
@@ -135,7 +152,10 @@ class PairRoiClassifier(nn.Module):
                 )
             img_batch = img_batch * 255.0
             img_batch = (img_batch - self.encoder_mean) / self.encoder_std
-            return self.encoder(img_batch)
+            encoded = self.encoder(img_batch)
+            if isinstance(encoded, (tuple, list)):
+                encoded = encoded[0]
+            return encoded
         img_batch = (img_batch - self.encoder_mean) / self.encoder_std
         return self.encoder(img_batch)
 
@@ -255,6 +275,7 @@ class PairChangeClassifier:
         ckpt_path: str,
         device: Optional[str] = None,
         mobile_sam_ckpt: Optional[str] = None,
+        sam_vit_h_ckpt: Optional[str] = None,
         roi_view_mode: Optional[str] = None,
         roi_crop_context_ratio: Optional[float] = None,
         roi_crop_min_context: Optional[int] = None,
@@ -286,6 +307,11 @@ class PairChangeClassifier:
                 encoder_checkpoint = mobile_sam_ckpt
             elif not encoder_checkpoint or not os.path.exists(encoder_checkpoint):
                 encoder_checkpoint = DEFAULT_MOBILE_SAM_CKPT
+        elif self.encoder_backbone in {"sam_vit_h", "vit_h"}:
+            if sam_vit_h_ckpt and os.path.exists(sam_vit_h_ckpt):
+                encoder_checkpoint = sam_vit_h_ckpt
+            elif not encoder_checkpoint or not os.path.exists(encoder_checkpoint):
+                encoder_checkpoint = DEFAULT_SAM_VIT_H_CKPT
 
         if device is None or device == "auto":
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -472,6 +498,7 @@ class PairBinaryRoiClassifier:
         ckpt_path: str,
         device: Optional[str] = None,
         mobile_sam_ckpt: Optional[str] = None,
+        sam_vit_h_ckpt: Optional[str] = None,
         roi_view_mode: Optional[str] = None,
         roi_crop_context_ratio: Optional[float] = None,
         roi_crop_min_context: Optional[int] = None,
@@ -503,6 +530,11 @@ class PairBinaryRoiClassifier:
                 encoder_checkpoint = mobile_sam_ckpt
             elif not encoder_checkpoint or not os.path.exists(encoder_checkpoint):
                 encoder_checkpoint = DEFAULT_MOBILE_SAM_CKPT
+        elif self.encoder_backbone in {"sam_vit_h", "vit_h"}:
+            if sam_vit_h_ckpt and os.path.exists(sam_vit_h_ckpt):
+                encoder_checkpoint = sam_vit_h_ckpt
+            elif not encoder_checkpoint or not os.path.exists(encoder_checkpoint):
+                encoder_checkpoint = DEFAULT_SAM_VIT_H_CKPT
 
         if device is None or device == "auto":
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -517,7 +549,8 @@ class PairBinaryRoiClassifier:
             encoder_backbone=self.encoder_backbone,
             encoder_checkpoint=encoder_checkpoint,
         )
-        model.load_state_dict(checkpoint["model_state"], strict=True)
+        save_head_only = bool(checkpoint.get("save_head_only", False))
+        model.load_state_dict(checkpoint["model_state"], strict=not save_head_only)
         model.eval().to(self.device)
         self.model = model
 

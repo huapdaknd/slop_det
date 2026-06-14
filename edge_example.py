@@ -11,7 +11,7 @@ DEFAULT_OUTPUT_DIR = ""
 
 
 class SlopDetApp:
-    """Programmatic launcher for edge change detection with YOLO overlap classification."""
+    """Programmatic launcher for MobileSAM change detection with CLIP labels."""
 
     def __init__(
         self,
@@ -19,6 +19,7 @@ class SlopDetApp:
         current: str,
         config_path: str | None = None,
         yolo_config_path: str | None = None,
+        clip_config_path: str | None = None,
     ) -> None:
         self.scene = scene
         self.current = current
@@ -27,22 +28,19 @@ class SlopDetApp:
         self.service = SlopDetService(
             cd_config_path=config_path,
             yolo_config_path=yolo_config_path,
+            clip_config_path=clip_config_path,
         )
 
     def run(
         self,
         output_dir: str | None = None,
         update_base: bool | None = None,
-        min_overlap_ratio: float = 0.15,
-        min_overlap_pixels: int = 100,
     ) -> dict:
-        return self.service.run_diff_yolo(
+        return self.service.run_clip(
             scene=self.scene,
             current=self.current,
             update_base=update_base,
             output_dir=output_dir,
-            min_overlap_ratio=min_overlap_ratio,
-            min_overlap_pixels=min_overlap_pixels,
         )
 
 
@@ -58,15 +56,14 @@ def _discover_sample() -> tuple[str, str] | None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run edge change detection, then write YOLO boxes that overlap red mask regions into mask.json."
+        description="Run MobileSAM change detection, then rewrite polygon labels with CLIP."
     )
     parser.add_argument("--scene", help="Scene folder name under data_root.")
     parser.add_argument("--current", help="Path to the current image.")
     parser.add_argument("--output-dir", help="Optional output directory.")
     parser.add_argument("--config", help="Optional path to config/model_config.json.")
     parser.add_argument("--yolo-config", help="Optional path to config/model_config_yolo.json.")
-    parser.add_argument("--min-overlap-ratio", type=float, default=0.15)
-    parser.add_argument("--min-overlap-pixels", type=int, default=100)
+    parser.add_argument("--clip-config", help="Optional path to config/clip_label_config.json.")
     return parser.parse_args()
 
 
@@ -87,11 +84,10 @@ def main() -> None:
         current=current,
         config_path=args.config,
         yolo_config_path=args.yolo_config,
+        clip_config_path=args.clip_config,
     )
     result = app.run(
         output_dir=output_dir,
-        min_overlap_ratio=args.min_overlap_ratio,
-        min_overlap_pixels=args.min_overlap_pixels,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

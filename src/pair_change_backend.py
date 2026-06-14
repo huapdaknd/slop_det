@@ -206,17 +206,49 @@ class ASPPSEChangeDecoder(nn.Module):
         return self.head(x)
 
 
+class DiffFocusedASPPSEChangeDecoder(nn.Module):
+    def __init__(self, in_channels: int = 256, hidden_channels: int = 256) -> None:
+        super().__init__()
+        fusion_channels = in_channels * 3
+        self.reduce = ConvNormAct(fusion_channels, hidden_channels, kernel_size=1, padding=0)
+        self.context = nn.Sequential(
+            ASPPBlock(hidden_channels),
+            SEBlock(hidden_channels),
+            ResidualBlock(hidden_channels),
+        )
+        self.up1 = UpRefineBlock(hidden_channels, hidden_channels // 2)
+        self.up2 = UpRefineBlock(hidden_channels // 2, hidden_channels // 4)
+        self.head = nn.Sequential(
+            ConvNormAct(hidden_channels // 4, hidden_channels // 4, kernel_size=3),
+            nn.Conv2d(hidden_channels // 4, 1, kernel_size=1),
+        )
+
+    def forward(self, base_feat: torch.Tensor, current_feat: torch.Tensor) -> torch.Tensor:
+        diff = current_feat - base_feat
+        fusion = torch.cat([torch.abs(diff), diff, diff * diff], dim=1)
+        x = self.reduce(fusion)
+        x = self.context(x)
+        x = self.up1(x)
+        x = self.up2(x)
+        return self.head(x)
+
+
 def build_change_decoder(decoder_arch: str, in_channels: int = 256, hidden_channels: int = 256) -> nn.Module:
     normalized = decoder_arch.strip().lower()
     if normalized in {"simple", "baseline"}:
         return ChangeDecoder(in_channels=in_channels, hidden_channels=hidden_channels)
     if normalized in {"aspp_se", "strong", "multiscale"}:
         return ASPPSEChangeDecoder(in_channels=in_channels, hidden_channels=hidden_channels)
+    if normalized in {"diff_aspp_se", "diff_focused", "diff"}:
+        return DiffFocusedASPPSEChangeDecoder(
+            in_channels=in_channels,
+            hidden_channels=hidden_channels,
+        )
     raise ValueError(f"Unsupported decoder architecture: {decoder_arch}")
 
 
 class PairChangeSegModel(nn.Module):
-    def __init__(self, backbone_checkpoint: Path, decoder_arch: str = "aspp_se") -> None:
+    def __init__(self, decoder_arch: str = "aspp_se") -> None:
         super().__init__()
         project_root = Path(__file__).resolve().parents[1]
         vendor_root = project_root / "src" / "vendor"
@@ -224,7 +256,7 @@ class PairChangeSegModel(nn.Module):
             sys.path.insert(0, str(vendor_root))
         from mobile_sam import sam_model_registry
 
-        sam = sam_model_registry["vit_t"](checkpoint=str(backbone_checkpoint))
+        sam = sam_model_registry["vit_t"](checkpoint=None)
         self.image_encoder = sam.image_encoder
         self.decoder_arch = decoder_arch.strip().lower()
         self.change_decoder = build_change_decoder(self.decoder_arch, in_channels=256, hidden_channels=256)
@@ -310,7 +342,6 @@ class PairChangeSegBackend:
     def __init__(
         self,
         checkpoint_path: Path,
-        backbone_checkpoint: Path,
         device: str = "cuda:0",
         decoder_arch: str = "auto",
         inference_mode: str = "sliding",
@@ -321,7 +352,6 @@ class PairChangeSegBackend:
         close_kernel: int = 5,
     ) -> None:
         self.checkpoint_path = Path(checkpoint_path).resolve()
-        self.backbone_checkpoint = Path(backbone_checkpoint).resolve()
         self.decoder_arch = str(decoder_arch).strip() or "auto"
         self.inference_mode = str(inference_mode).strip() or "sliding"
         self.crop_size = int(crop_size)
@@ -332,28 +362,26 @@ class PairChangeSegBackend:
 
         if not self.checkpoint_path.exists():
             raise FileNotFoundError(f"pair_change_checkpoint not found: {self.checkpoint_path}")
-        if not self.backbone_checkpoint.exists():
-            raise FileNotFoundError(f"backbone checkpoint not found: {self.backbone_checkpoint}")
 
         device_arg = str(device).strip()
         self.device = torch.device(
             device_arg if torch.cuda.is_available() or not device_arg.startswith("cuda") else "cpu"
         )
-        state = torch.load(str(self.checkpoint_path), map_location=self.device)
+        state = torch.load(str(self.checkpoint_path), map_location="cpu")
         resolved_arch = self._resolve_decoder_arch(state)
         self.decoder_arch = resolved_arch
 
-        model = PairChangeSegModel(
-            backbone_checkpoint=self.backbone_checkpoint,
-            decoder_arch=resolved_arch,
-        ).to(self.device)
+        model = PairChangeSegModel(decoder_arch=resolved_arch)
         if isinstance(state, dict) and "model_state" in state:
-            model.load_state_dict(state["model_state"], strict=False)
+            model_state = state["model_state"]
         elif isinstance(state, dict) and "image_encoder.patch_embed.seq.0.c.weight" in state:
-            model.load_state_dict(state, strict=True)
+            model_state = state
         else:
-            model.load_state_dict(state, strict=False)
-        model.eval()
+            raise ValueError(
+                f"Unsupported pair-change checkpoint format: {self.checkpoint_path}"
+            )
+        model.load_state_dict(model_state, strict=True)
+        model.to(self.device).eval()
         self.model = model
 
     def _resolve_decoder_arch(self, state: Any) -> str:

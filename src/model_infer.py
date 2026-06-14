@@ -237,14 +237,10 @@ class OnlineChangeService:
         backend_name = str(self.config.proposal_backend).strip().lower()
         if backend_name in {"pair_change_seg", "pair_change", "mobile_sam_pair"}:
             checkpoint_path = self.pair_change_checkpoint
-            backbone_checkpoint = self.mobile_sam_ckpt
             if checkpoint_path is None:
                 raise FileNotFoundError("pair_change_checkpoint is required for proposal_backend=pair_change_seg")
-            if backbone_checkpoint is None:
-                raise FileNotFoundError("mobile_sam_ckpt is required for proposal_backend=pair_change_seg")
             return PairChangeSegBackend(
                 checkpoint_path=checkpoint_path,
-                backbone_checkpoint=backbone_checkpoint,
                 device=self.config.pair_change_device,
                 decoder_arch=self.config.pair_change_decoder_arch,
                 inference_mode=self.config.pair_change_inference_mode,
@@ -276,6 +272,7 @@ class OnlineChangeService:
             ckpt_path=str(self.classifier_ckpt),
             device=self.config.classifier_device,
             mobile_sam_ckpt=str(self.mobile_sam_ckpt) if self.mobile_sam_ckpt else None,
+            sam_vit_h_ckpt=str(self.sam_vit_h_ckpt) if self.sam_vit_h_ckpt else None,
             roi_view_mode=roi_view_mode,
             roi_crop_context_ratio=roi_crop_context_ratio,
             roi_crop_min_context=roi_crop_min_context,
@@ -301,6 +298,7 @@ class OnlineChangeService:
             ckpt_path=str(self.binary_classifier_ckpt),
             device=self.config.binary_classifier_device,
             mobile_sam_ckpt=str(self.mobile_sam_ckpt) if self.mobile_sam_ckpt else None,
+            sam_vit_h_ckpt=str(self.sam_vit_h_ckpt) if self.sam_vit_h_ckpt else None,
             roi_view_mode=roi_view_mode,
             roi_crop_context_ratio=roi_crop_context_ratio,
             roi_crop_min_context=roi_crop_min_context,
@@ -375,15 +373,11 @@ class OnlineChangeService:
             raise RuntimeError(f"Expected 1 base image in {scene_dir}, found {len(images)}")
         return images[0]
 
-    def _next_output_dir(self, scene_name: str) -> Path:
+    def _next_output_dir(self, scene_name: str, current_stem: str) -> Path:
         scene_root = self.output_root / f"{scene_name}_images"
         scene_root.mkdir(parents=True, exist_ok=True)
-        max_idx = 0
-        for p in scene_root.iterdir():
-            if p.is_dir() and p.name.startswith("CD_") and p.name[3:].isdigit():
-                max_idx = max(max_idx, int(p.name[3:]))
-        out = scene_root / f"CD_{max_idx + 1}"
-        out.mkdir(parents=True, exist_ok=False)
+        out = scene_root / current_stem
+        out.mkdir(parents=True, exist_ok=True)
         return out
 
     def _run_mask(self, base_path: Path, current_path: Path) -> np.ndarray:
@@ -1266,6 +1260,40 @@ class OnlineChangeService:
             "class_counts": yolo_result.get("class_counts", {}),
         }
 
+    @staticmethod
+    def _render_labelme_outline_preview(
+        image_bgr: np.ndarray,
+        labelme: Dict[str, Any],
+        line_color: Tuple[int, int, int] = (0, 0, 255),
+        line_thickness: int = 4,
+    ) -> np.ndarray:
+        preview = image_bgr.copy()
+        image_height, image_width = preview.shape[:2]
+        for shape in labelme.get("shapes") or []:
+            if not isinstance(shape, dict):
+                continue
+            points = np.asarray(shape.get("points") or [], dtype=np.float32)
+            if points.shape[0] < 2:
+                continue
+            points[:, 0] = np.clip(points[:, 0], 0, image_width - 1)
+            points[:, 1] = np.clip(points[:, 1], 0, image_height - 1)
+            pts = np.round(points).astype(np.int32)
+            shape_type = str(shape.get("shape_type") or "polygon").lower()
+            if shape_type == "rectangle" and pts.shape[0] >= 2:
+                x1, y1 = pts[0].tolist()
+                x2, y2 = pts[1].tolist()
+                cv2.rectangle(preview, (x1, y1), (x2, y2), line_color, line_thickness, cv2.LINE_AA)
+            elif pts.shape[0] >= 3:
+                cv2.polylines(
+                    preview,
+                    [pts.reshape(-1, 1, 2)],
+                    True,
+                    line_color,
+                    line_thickness,
+                    cv2.LINE_AA,
+                )
+        return preview
+
     def _update_scene_base(self, scene_dir: Path, current_path: Path) -> Path:
         new_base = scene_dir / current_path.name
         if new_base.resolve() != current_path.resolve():
@@ -1295,12 +1323,12 @@ class OnlineChangeService:
         base = self._get_single_base(scene_dir)
         mask = self._run_mask(base, current)
 
+        current_stem = current.stem
         if output_dir is None:
-            out_dir = self._next_output_dir(scene)
+            out_dir = self._next_output_dir(scene, current_stem)
         else:
             out_dir = Path(output_dir).resolve()
             out_dir.mkdir(parents=True, exist_ok=True)
-        current_stem = current.stem
         base_out = out_dir / f"{current_stem}_base{base.suffix}"
         current_out = out_dir / f"{current_stem}_current{current.suffix}"
         masked_out = out_dir / f"{current_stem}_mask{current.suffix}"
@@ -1323,10 +1351,6 @@ class OnlineChangeService:
             self.config.min_change_ratio,
         )
         roi_mask = self._load_base_roi_mask(scene, current_img.shape[0], current_img.shape[1])
-        if write_mask_image:
-            overlay = current_img.copy()
-            overlay[mask_orig == 1] = [0, 0, 255]
-            self._write_image_unicode(masked_out, overlay)
 
         veg_metrics = self._compute_vegetation_coverage_metrics(
             scene=scene,
@@ -1379,6 +1403,9 @@ class OnlineChangeService:
             self._append_yolo_to_labelme(labelme, yolo_result)
         with json_out.open("w", encoding="utf-8") as f:
             json.dump(labelme, f, ensure_ascii=False, indent=2)
+        if write_mask_image:
+            preview = self._render_labelme_outline_preview(current_img, labelme)
+            self._write_image_unicode(masked_out, preview)
 
         result = {
             "scene": scene,
