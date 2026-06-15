@@ -544,7 +544,12 @@ def transition_label(base_label: str, current_label: str) -> str:
         return "construction_activity"
     if (
         base_label in VEGETATION_STATES
-        and current_label == "cleared_or_excavated_slope"
+        and current_label in {
+            "cleared_or_excavated_slope",
+            "natural_landslide",
+            "exposed_rock_or_soil",
+            "loose_rock_or_gravel",
+        }
     ):
         return "vegetation_loss_candidate"
     if current_label == "cleared_or_excavated_slope" and base_label != "cleared_or_excavated_slope":
@@ -553,11 +558,6 @@ def transition_label(base_label: str, current_label: str) -> str:
         return "vegetation_loss_candidate"
     if current_label == "natural_landslide" and base_label != "natural_landslide":
         return "landslide_candidate"
-    if (
-        base_label in VEGETATION_STATES
-        and current_label in {"exposed_rock_or_soil", "loose_rock_or_gravel"}
-    ):
-        return "vegetation_loss_candidate"
     if current_label == "loose_rock_or_gravel" and base_label not in {"loose_rock_or_gravel", "natural_landslide"}:
         return "rockfall_candidate"
     if (
