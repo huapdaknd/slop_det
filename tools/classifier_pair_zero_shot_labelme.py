@@ -178,6 +178,11 @@ NON_TARGET_STATES = {
     "road_surface",
     "manmade_structure",
 }
+VEGETATION_STATES = {
+    "healthy_green_vegetation",
+    "seasonal_leaf_color",
+    "dry_or_leafless_vegetation",
+}
 CONTEXT_OBJECT_STATES = {
     "vehicle",
     "person",
@@ -441,11 +446,16 @@ def resolve_transition(
     if (
         pair_is_strong
         and pair_transition == "vegetation_loss_candidate"
-        and base_label == "healthy_green_vegetation"
+        and base_label in VEGETATION_STATES
         and (
-            current_label in {"cut_or_fallen_trees", "exposed_rock_or_soil"}
+            current_label in {
+                "cut_or_fallen_trees",
+                "exposed_rock_or_soil",
+                "loose_rock_or_gravel",
+            }
             or current_top3.get("cut_or_fallen_trees", 0.0) >= 0.15
             or current_top3.get("exposed_rock_or_soil", 0.0) >= 0.25
+            or current_top3.get("loose_rock_or_gravel", 0.0) >= 0.25
         )
     ):
         return pair_transition, "strong_pair_classifier"
@@ -465,8 +475,26 @@ def resolve_transition(
         "cleared_or_excavated_slope",
         "exposed_rock_or_soil",
         "natural_landslide",
+        "loose_rock_or_gravel",
     }:
         return pair_transition, "pair_classifier"
+    if (
+        pair_is_strong
+        and pair_transition == "landslide_candidate"
+        and current_label in {
+            "natural_landslide",
+            "exposed_rock_or_soil",
+            "loose_rock_or_gravel",
+        }
+    ):
+        return pair_transition, "strong_pair_classifier"
+    if (
+        pair_is_strong
+        and pair_transition == "rockfall_candidate"
+        and current_label == "loose_rock_or_gravel"
+        and str(current_result.get("context_top1")) == "road_surface"
+    ):
+        return pair_transition, "strong_pair_classifier"
     if pair_transition in {
         "vegetation_loss_candidate",
         "landslide_candidate",
@@ -501,10 +529,13 @@ def transition_label(base_label: str, current_label: str) -> str:
         return "vegetation_loss_candidate"
     if current_label == "natural_landslide" and base_label != "natural_landslide":
         return "landslide_candidate"
+    if (
+        base_label in VEGETATION_STATES
+        and current_label in {"exposed_rock_or_soil", "loose_rock_or_gravel"}
+    ):
+        return "vegetation_loss_candidate"
     if current_label == "loose_rock_or_gravel" and base_label not in {"loose_rock_or_gravel", "natural_landslide"}:
         return "rockfall_candidate"
-    if base_label == "healthy_green_vegetation" and current_label == "exposed_rock_or_soil":
-        return "vegetation_loss_candidate"
     if (
         current_label == "seasonal_leaf_color"
         and base_label != "seasonal_leaf_color"
