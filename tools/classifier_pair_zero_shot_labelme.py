@@ -476,7 +476,7 @@ def resolve_transition(
     ):
         if base_label in VEGETATION_STATES:
             return "vegetation_loss_candidate", "pair_classifier"
-        return "construction_clearing", "pair_classifier"
+        return "other_visual_change", "pair_classifier"
     if (
         pair_transition == "construction_clearing"
         and base_label in VEGETATION_STATES
@@ -496,7 +496,7 @@ def resolve_transition(
         "natural_landslide",
         "loose_rock_or_gravel",
     }:
-        return pair_transition, "pair_classifier"
+        return "other_visual_change", "pair_classifier"
     if (
         pair_is_strong
         and pair_transition == "landslide_candidate"
@@ -548,7 +548,7 @@ def transition_label(base_label: str, current_label: str) -> str:
     ):
         return "vegetation_loss_candidate"
     if current_label == "cleared_or_excavated_slope" and base_label != "cleared_or_excavated_slope":
-        return "construction_clearing"
+        return "other_visual_change"
     if current_label == "cut_or_fallen_trees" and base_label != "cut_or_fallen_trees":
         return "vegetation_loss_candidate"
     if current_label == "natural_landslide" and base_label != "natural_landslide":
