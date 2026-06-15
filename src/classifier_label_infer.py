@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import torch
 
-from tools.clip_pair_zero_shot_labelme import (
+from tools.classifier_pair_zero_shot_labelme import (
     DEFAULT_STATE_PROMPTS,
     DEFAULT_TRANSITION_PROMPTS,
     classify_batch,
@@ -21,7 +21,7 @@ from tools.clip_pair_zero_shot_labelme import (
     resolve_transition,
     select_view_result,
 )
-from tools.clip_zero_shot_labelme import (
+from tools.classifier_zero_shot_labelme import (
     batched,
     bgr_to_pil,
     clamp_crop_box,
@@ -34,8 +34,8 @@ from tools.clip_zero_shot_labelme import (
 )
 
 
-class ClipLabelMappingService:
-    """Rewrite change-region labels using independent base/current CLIP states."""
+class ClassifierLabelMappingService:
+    """Rewrite change-region labels using independent base/current classifier states."""
 
     def __init__(
         self,
@@ -57,7 +57,7 @@ class ClipLabelMappingService:
         label_map: Optional[Mapping[str, str]] = None,
         base_update_labels: Optional[List[str]] = None,
     ) -> None:
-        self.model_dir = Path(model_dir).resolve()
+        self.model_dir = Path(model_dir).absolute()
         self.device = torch.device(device)
         self.precision = str(precision)
         self.batch_size = max(1, int(batch_size))
@@ -111,12 +111,12 @@ class ClipLabelMappingService:
         )
 
     @classmethod
-    def from_config_file(cls, config_path: str) -> "ClipLabelMappingService":
+    def from_config_file(cls, config_path: str) -> "ClassifierLabelMappingService":
         path = Path(config_path).resolve()
         payload = json.loads(path.read_text(encoding="utf-8"))
         model_dir = Path(str(payload["model_dir"]))
         if not model_dir.is_absolute():
-            model_dir = (path.parent / model_dir).resolve()
+            model_dir = (path.parent / model_dir).absolute()
         return cls(
             model_dir=model_dir,
             device=str(payload.get("device", "cuda:0")),
@@ -346,23 +346,23 @@ class ClipLabelMappingService:
                 }
                 description.update(
                     {
-                        "source": "pair_change_seg_with_clip",
-                        "clip_transition": transition,
-                        "clip_transition_source": transition_source,
-                        "clip_score": round(
+                        "source": "pair_change_seg_with_classifier",
+                        "classifier_transition": transition,
+                        "classifier_transition_source": transition_source,
+                        "classifier_score": round(
                             float(
                                 pair_result["score"]
                                 if transition_source
-                                in {"pair_clip", "strong_pair_clip"}
+                                in {"pair_classifier", "strong_pair_classifier"}
                                 else current_result["score"]
                             ),
                             6,
                         ),
-                        "clip_margin": round(
+                        "classifier_margin": round(
                             float(
                                 pair_result["margin"]
                                 if transition_source
-                                in {"pair_clip", "strong_pair_clip"}
+                                in {"pair_classifier", "strong_pair_classifier"}
                                 else current_result["margin"]
                             ),
                             6,
@@ -402,7 +402,7 @@ class ClipLabelMappingService:
         if self.keep_only_alarm_labels:
             payload["shapes"] = accepted_shapes
 
-        payload.pop("clip_classification", None)
+        payload.pop("classifier_classification", None)
         payload["imagePath"] = current_path.name
         payload["imageData"] = None
         payload["flags"] = payload.get("flags") or {}

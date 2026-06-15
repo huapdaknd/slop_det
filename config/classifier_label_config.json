@@ -1,5 +1,5 @@
 {
-  "model_dir": "../models/clip/CLIP-ViT-L-14-DataComp.XL-s13B-b90K",
+  "model_dir": "../models/classifier/zero_shot_vit_l14",
   "device": "cuda:0",
   "precision": "fp16",
   "batch_size": 32,

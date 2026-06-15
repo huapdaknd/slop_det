@@ -11,7 +11,7 @@ import numpy as np
 import torch
 
 try:
-    from clip_zero_shot_labelme import (
+    from classifier_zero_shot_labelme import (
         batched,
         bgr_to_pil,
         clamp_crop_box,
@@ -27,7 +27,7 @@ try:
         write_image,
     )
 except ImportError:
-    from tools.clip_zero_shot_labelme import (
+    from tools.classifier_zero_shot_labelme import (
         batched,
         bgr_to_pil,
         clamp_crop_box,
@@ -448,7 +448,7 @@ def resolve_transition(
             or current_top3.get("exposed_rock_or_soil", 0.0) >= 0.25
         )
     ):
-        return pair_transition, "strong_pair_clip"
+        return pair_transition, "strong_pair_classifier"
 
     if (
         pair_transition == "vegetation_loss_candidate"
@@ -459,14 +459,14 @@ def resolve_transition(
             "natural_landslide",
         }
     ):
-        return "construction_clearing", "pair_clip"
+        return "construction_clearing", "pair_classifier"
     if pair_transition == "construction_clearing" and current_label in {
         UNKNOWN_STATE,
         "cleared_or_excavated_slope",
         "exposed_rock_or_soil",
         "natural_landslide",
     }:
-        return pair_transition, "pair_clip"
+        return pair_transition, "pair_classifier"
     if pair_transition in {
         "vegetation_loss_candidate",
         "landslide_candidate",
@@ -478,13 +478,13 @@ def resolve_transition(
         "uncertain_change",
         "other_visual_change",
     }:
-        return pair_transition, "pair_clip"
+        return pair_transition, "pair_classifier"
     if pair_transition in {"non_target_change", "no_meaningful_change"} and state_transition in {
         pair_transition,
         "uncertain_change",
         "other_visual_change",
     }:
-        return pair_transition, "pair_clip"
+        return pair_transition, "pair_classifier"
     return state_transition, "state_rule"
 
 
@@ -534,10 +534,10 @@ def risk_group(
     min_pair_margin: float,
 ) -> str:
     if (
-        transition_source not in {"pair_clip", "strong_pair_clip"}
+        transition_source not in {"pair_classifier", "strong_pair_classifier"}
         and min(base_margin, current_margin) < min_margin
     ) or (
-        transition_source in {"pair_clip", "strong_pair_clip"}
+        transition_source in {"pair_classifier", "strong_pair_classifier"}
         and pair_margin < min_pair_margin
     ):
         return "review"
@@ -735,7 +735,12 @@ def write_results_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
 def run(args: argparse.Namespace) -> None:
     input_root = resolve_path(args.input_root)
     output_root = resolve_path(args.output_root)
-    model_dir = resolve_path(args.model_dir)
+    model_dir_arg = Path(args.model_dir)
+    model_dir = (
+        model_dir_arg.absolute()
+        if model_dir_arg.is_absolute()
+        else (project_root() / model_dir_arg).absolute()
+    )
     prompts = load_prompts(args.prompts)
     device = torch.device(args.device)
     open_clip, model, preprocess = load_model(model_dir, device, args.precision)
@@ -934,7 +939,7 @@ def run(args: argparse.Namespace) -> None:
                 }
             )
 
-    write_results_csv(output_root / "clip_pair_zero_shot_results.csv", rows)
+    write_results_csv(output_root / "classifier_pair_zero_shot_results.csv", rows)
     write_html(output_root / "index.html", output_root, rows)
     summary = {
         "input_root": str(input_root),
@@ -995,7 +1000,7 @@ def write_html(path: Path, output_root: Path, rows: Sequence[Mapping[str, Any]])
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CLIP pair zero-shot review</title>
+<title>Classifier pair zero-shot review</title>
 <style>
 body {{ margin: 0; font-family: Arial, sans-serif; background: #f3f5f6; color: #202326; }}
 header {{ position: sticky; top: 0; z-index: 2; background: #fff; border-bottom: 1px solid #ccd2d6; padding: 12px 18px; }}
@@ -1013,7 +1018,7 @@ main {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(520px, 1f
 </head>
 <body>
 <header>
-  <h1>CLIP base/current zero-shot review ({len(rows)} regions)</h1>
+  <h1>Classifier base/current zero-shot review ({len(rows)} regions)</h1>
   <div class="filters">
     <select id="risk"><option value="">All risk groups</option>{''.join(f'<option>{html.escape(v)}</option>' for v in risks)}</select>
     <select id="source"><option value="">All GT labels</option>{''.join(f'<option>{html.escape(v)}</option>' for v in sources)}</select>
@@ -1042,7 +1047,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Classify base/current LabelMe crops separately with OpenCLIP.")
     parser.add_argument("--input-root", required=True)
     parser.add_argument("--output-root", required=True)
-    parser.add_argument("--model-dir", default="models/clip/CLIP-ViT-L-14-DataComp.XL-s13B-b90K")
+    parser.add_argument("--model-dir", default="models/classifier/zero_shot_vit_l14")
     parser.add_argument("--prompts", default="")
     parser.add_argument("--device", default="cuda:2")
     parser.add_argument("--precision", default="fp16", choices=["fp32", "fp16", "bf16"])
@@ -1068,7 +1073,7 @@ def parse_args() -> argparse.Namespace:
         "--transition-mode",
         choices=["state_only", "hybrid"],
         default="hybrid",
-        help="Use only base/current state rules, or allow pair-CLIP transition overrides.",
+        help="Use only base/current state rules, or allow pair-classifier transition overrides.",
     )
     parser.add_argument("--min-pair-score", type=float, default=0.45)
     parser.add_argument("--min-pair-margin", type=float, default=0.10)

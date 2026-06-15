@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Dict, Optional
 
-from .clip_label_infer import ClipLabelMappingService
+from .classifier_label_infer import ClassifierLabelMappingService
 from .diff_yolo_infer import DiffYoloClassificationService
 from .model_infer import OnlineChangeService
 from .veg_infer import VegetationCoverageService
@@ -16,13 +16,13 @@ class SlopDetService:
         cd_config_path: Optional[str] = None,
         veg_config_path: Optional[str] = None,
         yolo_config_path: Optional[str] = None,
-        clip_config_path: Optional[str] = None,
+        classifier_config_path: Optional[str] = None,
     ) -> None:
         root = Path(__file__).resolve().parents[1]
         default_cd = root / "config" / "model_config.json"
         default_veg = root / "config" / "vegetation_config.json"
         default_yolo = root / "config" / "model_config_yolo.json"
-        default_clip = root / "config" / "clip_label_config.json"
+        default_classifier = root / "config" / "classifier_label_config.json"
 
         self.cd_config_path = str(Path(cd_config_path).resolve()) if cd_config_path else str(default_cd.resolve())
         self.veg_config_path = (
@@ -31,14 +31,16 @@ class SlopDetService:
         self.yolo_config_path = (
             str(Path(yolo_config_path).resolve()) if yolo_config_path else str(default_yolo.resolve())
         )
-        self.clip_config_path = (
-            str(Path(clip_config_path).resolve()) if clip_config_path else str(default_clip.resolve())
+        self.classifier_config_path = (
+            str(Path(classifier_config_path).resolve())
+            if classifier_config_path
+            else str(default_classifier.resolve())
         )
         self._cd_service: Optional[OnlineChangeService] = None
         self._veg_service: Optional[VegetationCoverageService] = None
         self._yolo_service: Optional[YoloDetectionService] = None
         self._diff_yolo_service: Optional[DiffYoloClassificationService] = None
-        self._clip_service: Optional[ClipLabelMappingService] = None
+        self._classifier_label_service: Optional[ClassifierLabelMappingService] = None
 
     def _get_cd_service(self) -> OnlineChangeService:
         if self._cd_service is None:
@@ -55,12 +57,12 @@ class SlopDetService:
             self._yolo_service = YoloDetectionService.from_config_file(self.yolo_config_path)
         return self._yolo_service
 
-    def _get_clip_service(self) -> ClipLabelMappingService:
-        if self._clip_service is None:
-            self._clip_service = ClipLabelMappingService.from_config_file(
-                self.clip_config_path
+    def _get_classifier_label_service(self) -> ClassifierLabelMappingService:
+        if self._classifier_label_service is None:
+            self._classifier_label_service = ClassifierLabelMappingService.from_config_file(
+                self.classifier_config_path
             )
-        return self._clip_service
+        return self._classifier_label_service
 
     def _get_diff_yolo_service(
         self,
@@ -91,13 +93,13 @@ class SlopDetService:
         min_overlap_pixels: int = 100,
         run_yolo_when_no_change: bool = False,
     ) -> Dict:
-        """Run MobileSAM change segmentation, then map polygon labels with CLIP."""
+        """Run MobileSAM change segmentation, then classify change polygons."""
         _ = (
             min_overlap_ratio,
             min_overlap_pixels,
             run_yolo_when_no_change,
         )
-        return self.run_clip(
+        return self.run_classifier(
             scene=scene,
             current=current,
             output_dir=output_dir,
@@ -144,7 +146,7 @@ class SlopDetService:
             save_debug_images=save_debug_images,
         )
 
-    def run_clip(
+    def run_classifier(
         self,
         scene: str,
         current: str,
@@ -153,7 +155,7 @@ class SlopDetService:
         write_base_current: bool = True,
         write_mask_image: bool = True,
     ) -> Dict:
-        """Write the four edge files, then replace polygon labels with CLIP mappings."""
+        """Write the four edge files, then replace polygon labels with classifier mappings."""
         cd_service = self._get_cd_service()
         result = cd_service.process(
             scene=scene,
@@ -163,16 +165,16 @@ class SlopDetService:
             write_base_current=write_base_current,
             write_mask_image=write_mask_image,
         )
-        clip_result = self._get_clip_service().process_output(
+        classifier_result = self._get_classifier_label_service().process_output(
             str(result["output_dir"])
         )
-        result["clip_classification"] = clip_result
-        result["json_shapes"] = int(clip_result["num_accepted_shapes"])
+        result["classifier_classification"] = classifier_result
+        result["json_shapes"] = int(classifier_result["num_accepted_shapes"])
         result["change_pixels"] = int(
-            clip_result["accepted_change_pixels"]
+            classifier_result["accepted_change_pixels"]
         )
         result["change_ratio"] = float(
-            clip_result["accepted_change_ratio"]
+            classifier_result["accepted_change_ratio"]
         )
         result["change"] = int(result["json_shapes"] > 0)
         should_update = (

@@ -11,7 +11,7 @@ from PIL import Image
 
 
 IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp")
-DEFAULT_MODEL_DIR = "models/clip/CLIP-ViT-L-14-DataComp.XL-s13B-b90K"
+DEFAULT_MODEL_DIR = "models/classifier/zero_shot_vit_l14"
 DEFAULT_PROMPTS: Dict[str, List[str]] = {
     "landslide": [
         "a landslide on a mountain road",
@@ -174,12 +174,12 @@ def draw_tag(image: np.ndarray, text: str) -> np.ndarray:
     return out
 
 
-def build_clip_crop(
+def build_classifier_crop(
     base: np.ndarray,
     current: np.ndarray,
     points: np.ndarray,
     crop_box: Tuple[int, int, int, int],
-    clip_view: str,
+    classifier_view: str,
 ) -> np.ndarray:
     cx1, cy1, cx2, cy2 = crop_box
     base_crop = base[cy1:cy2, cx1:cx2].copy()
@@ -189,13 +189,13 @@ def build_clip_crop(
     rel[:, 1] -= cy1
     masked = overlay_shape(current_crop, rel)
 
-    mode = str(clip_view).lower()
+    mode = str(classifier_view).lower()
     if mode == "current":
         return current_crop
     if mode == "masked":
         return masked
     if mode != "triplet":
-        raise ValueError(f"Unsupported clip_view: {clip_view}")
+        raise ValueError(f"Unsupported classifier_view: {classifier_view}")
 
     base_crop = draw_tag(base_crop, "base")
     current_crop = draw_tag(current_crop, "current")
@@ -259,11 +259,11 @@ def batched(items: Sequence[Any], batch_size: int) -> Iterable[Sequence[Any]]:
 def load_model(model_dir: Path, device: torch.device, precision: str):
     import open_clip
 
-    config = read_json(model_dir / "open_clip_config.json")
+    config = read_json(model_dir / "classifier_config.json")
     preprocess_cfg = config.get("preprocess_cfg") or {}
     image_mean = tuple(float(v) for v in preprocess_cfg.get("mean", [])) or None
     image_std = tuple(float(v) for v in preprocess_cfg.get("std", [])) or None
-    model_path = model_dir / "open_clip_pytorch_model.bin"
+    model_path = model_dir / "classifier_model.bin"
     model, _, preprocess = open_clip.create_model_and_transforms(
         "ViT-L-14",
         pretrained=str(model_path),
@@ -301,9 +301,9 @@ def write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
         "json_path",
         "shape_index",
         "source_label",
-        "clip_label",
-        "clip_score",
-        "clip_margin",
+        "classifier_label",
+        "classifier_score",
+        "classifier_margin",
         "top3",
         "crop_path",
         "current_path",
@@ -334,7 +334,12 @@ def write_labelme(path: Path, source_payload: Mapping[str, Any], shapes: Sequenc
 def run(args: argparse.Namespace) -> None:
     input_root = resolve_path(args.input_root)
     output_root = resolve_path(args.output_root)
-    model_dir = resolve_path(args.model_dir)
+    model_dir_arg = Path(args.model_dir)
+    model_dir = (
+        model_dir_arg.absolute()
+        if model_dir_arg.is_absolute()
+        else (project_root() / model_dir_arg).absolute()
+    )
     prompts = normalize_prompts(resolve_path(args.prompts) if args.prompts else None)
     device = torch.device(args.device)
     open_clip, model, preprocess = load_model(model_dir, device, args.precision)
@@ -345,7 +350,7 @@ def run(args: argparse.Namespace) -> None:
         json_paths = json_paths[: args.limit]
     jobs: List[Dict[str, Any]] = []
     payloads: Dict[Path, Dict[str, Any]] = {}
-    clip_shapes: Dict[Path, List[Dict[str, Any]]] = {}
+    classifier_shapes: Dict[Path, List[Dict[str, Any]]] = {}
 
     for json_path in json_paths:
         try:
@@ -364,7 +369,7 @@ def run(args: argparse.Namespace) -> None:
 
         h, w = current.shape[:2]
         payloads[json_path] = payload
-        clip_shapes[json_path] = []
+        classifier_shapes[json_path] = []
         for idx, shape in enumerate(payload.get("shapes") or []):
             if not isinstance(shape, dict):
                 continue
@@ -372,7 +377,7 @@ def run(args: argparse.Namespace) -> None:
             if points.shape[0] < 3:
                 continue
             crop_box = clamp_crop_box(points, w, h, args.pad_ratio, args.min_pad)
-            crop = build_clip_crop(base, current, points, crop_box, args.clip_view)
+            crop = build_classifier_crop(base, current, points, crop_box, args.classifier_view)
             rel = json_path.relative_to(input_root)
             crop_path = output_root / "crops" / rel.parent / f"{json_path.stem}_shape{idx:04d}.jpg"
             write_image(crop_path, crop)
@@ -412,23 +417,23 @@ def run(args: argparse.Namespace) -> None:
             desc = dict(job["description"])
             desc.update(
                 {
-                    "clip_source_label": job["source_label"],
-                    "clip_label": label,
-                    "clip_score": round(float(score), 6),
-                    "clip_margin": round(float(margin), 6),
-                    "clip_top3": [{"label": name, "score": round(float(value), 6)} for name, value in top],
-                    "clip_view": args.clip_view,
-                    "clip_model": str(model_dir),
+                    "classifier_source_label": job["source_label"],
+                    "classifier_label": label,
+                    "classifier_score": round(float(score), 6),
+                    "classifier_margin": round(float(margin), 6),
+                    "classifier_top3": [{"label": name, "score": round(float(value), 6)} for name, value in top],
+                    "classifier_view": args.classifier_view,
+                    "classifier_model": str(model_dir),
                 }
             )
             row = {
                 "json_path": str(job["json_path"]),
                 "shape_index": int(job["shape_index"]),
                 "source_label": job["source_label"],
-                "clip_label": label,
-                "clip_score": round(float(score), 6),
-                "clip_margin": round(float(margin), 6),
-                "top3": json.dumps(desc["clip_top3"], ensure_ascii=False),
+                "classifier_label": label,
+                "classifier_score": round(float(score), 6),
+                "classifier_margin": round(float(margin), 6),
+                "top3": json.dumps(desc["classifier_top3"], ensure_ascii=False),
                 "crop_path": str(job["crop_path"]),
                 "current_path": str(job["current_path"]),
                 "base_path": str(job["base_path"]),
@@ -444,23 +449,23 @@ def run(args: argparse.Namespace) -> None:
                 shape["label"] = label
                 shape["flags"] = shape.get("flags") or {}
                 shape["description"] = json.dumps(desc, ensure_ascii=False)
-                clip_shapes[job["json_path"]].append(shape)
+                classifier_shapes[job["json_path"]].append(shape)
 
-    write_csv(output_root / "clip_zero_shot_results.csv", rows)
+    write_csv(output_root / "classifier_zero_shot_results.csv", rows)
     if args.write_json:
-        for json_path, shapes in clip_shapes.items():
+        for json_path, shapes in classifier_shapes.items():
             if not shapes:
                 continue
             rel = json_path.relative_to(input_root)
             source_payload = payloads[json_path]
             current_path = find_pair_image(json_path, "_current", source_payload)
             image_name = current_path.name if current_path is not None else str(source_payload.get("imagePath") or "")
-            write_labelme(output_root / "labelme_clip" / rel, source_payload, shapes, image_name)
+            write_labelme(output_root / "labelme_classifier" / rel, source_payload, shapes, image_name)
     summary = {
         "input_root": str(input_root),
         "output_root": str(output_root),
         "model_dir": str(model_dir),
-        "clip_view": args.clip_view,
+        "classifier_view": args.classifier_view,
         "num_json": len(json_paths),
         "num_shapes": len(rows),
         "labels": labels,
@@ -470,20 +475,20 @@ def run(args: argparse.Namespace) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run OpenCLIP zero-shot classification on LabelMe change proposals.")
+    parser = argparse.ArgumentParser(description="Run zero-shot classification on LabelMe change proposals.")
     parser.add_argument("--input-root", required=True, help="Root containing *_mask.json outputs.")
     parser.add_argument("--output-root", required=True, help="Directory for CSV, crops, and optional LabelMe JSON.")
-    parser.add_argument("--model-dir", default=DEFAULT_MODEL_DIR, help="Local OpenCLIP model directory.")
+    parser.add_argument("--model-dir", default=DEFAULT_MODEL_DIR, help="Local classifier model directory.")
     parser.add_argument("--prompts", default="", help="Optional JSON dict of label -> prompt/list.")
     parser.add_argument("--device", default="cuda:2")
     parser.add_argument("--precision", default="fp16", choices=["fp32", "fp16", "bf16"])
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--clip-view", default="triplet", choices=["current", "masked", "triplet"])
+    parser.add_argument("--classifier-view", default="triplet", choices=["current", "masked", "triplet"])
     parser.add_argument("--pad-ratio", type=float, default=0.20)
     parser.add_argument("--min-pad", type=int, default=24)
     parser.add_argument("--logit-scale", type=float, default=100.0)
     parser.add_argument("--limit", type=int, default=0, help="Limit number of JSON files for smoke tests.")
-    parser.add_argument("--write-json", action="store_true", help="Write LabelMe JSON with CLIP labels.")
+    parser.add_argument("--write-json", action="store_true", help="Write LabelMe JSON with classifier labels.")
     return parser.parse_args()
 
 

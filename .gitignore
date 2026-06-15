@@ -13,5 +13,5 @@ backups/
 *.log
 tmp_*
 
-# CLIP is distributed separately because the checkpoint is about 1.6 GB.
-models/clip/
+# The zero-shot classifier is distributed separately because it is about 1.6 GB.
+models/classifier/

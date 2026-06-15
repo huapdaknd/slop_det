@@ -11,7 +11,7 @@ DEFAULT_OUTPUT_DIR = ""
 
 
 class SlopDetApp:
-    """Programmatic launcher for MobileSAM change detection with CLIP labels."""
+    """Programmatic launcher for MobileSAM change detection with classifier labels."""
 
     def __init__(
         self,
@@ -19,7 +19,7 @@ class SlopDetApp:
         current: str,
         config_path: str | None = None,
         yolo_config_path: str | None = None,
-        clip_config_path: str | None = None,
+        classifier_config_path: str | None = None,
     ) -> None:
         self.scene = scene
         self.current = current
@@ -28,7 +28,7 @@ class SlopDetApp:
         self.service = SlopDetService(
             cd_config_path=config_path,
             yolo_config_path=yolo_config_path,
-            clip_config_path=clip_config_path,
+            classifier_config_path=classifier_config_path,
         )
 
     def run(
@@ -36,7 +36,7 @@ class SlopDetApp:
         output_dir: str | None = None,
         update_base: bool | None = None,
     ) -> dict:
-        return self.service.run_clip(
+        return self.service.run_classifier(
             scene=self.scene,
             current=self.current,
             update_base=update_base,
@@ -56,14 +56,17 @@ def _discover_sample() -> tuple[str, str] | None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run MobileSAM change detection, then rewrite polygon labels with CLIP."
+        description="Run MobileSAM change detection, then classify polygon labels."
     )
     parser.add_argument("--scene", help="Scene folder name under data_root.")
     parser.add_argument("--current", help="Path to the current image.")
     parser.add_argument("--output-dir", help="Optional output directory.")
     parser.add_argument("--config", help="Optional path to config/model_config.json.")
     parser.add_argument("--yolo-config", help="Optional path to config/model_config_yolo.json.")
-    parser.add_argument("--clip-config", help="Optional path to config/clip_label_config.json.")
+    parser.add_argument(
+        "--classifier-config",
+        help="Optional path to config/classifier_label_config.json.",
+    )
     return parser.parse_args()
 
 
@@ -84,7 +87,7 @@ def main() -> None:
         current=current,
         config_path=args.config,
         yolo_config_path=args.yolo_config,
-        clip_config_path=args.clip_config,
+        classifier_config_path=args.classifier_config,
     )
     result = app.run(
         output_dir=output_dir,

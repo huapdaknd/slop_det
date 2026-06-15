@@ -21,7 +21,7 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run V3A change segmentation and CLIP labeling in scene order."
+        description="Run V3A change segmentation and classifier labeling in scene order."
     )
     parser.add_argument("--current-root", required=True)
     parser.add_argument("--output-root", required=True)
@@ -30,8 +30,8 @@ def parse_args() -> argparse.Namespace:
         default=str(PROJECT_ROOT / "config" / "model_config.json"),
     )
     parser.add_argument(
-        "--clip-config",
-        default=str(PROJECT_ROOT / "config" / "clip_label_config.json"),
+        "--classifier-config",
+        default=str(PROJECT_ROOT / "config" / "classifier_label_config.json"),
     )
     parser.add_argument("--expected-images", type=int, default=0)
     parser.add_argument("--min-free-gb", type=float, default=8.0)
@@ -73,7 +73,7 @@ def main() -> None:
     current_root = Path(args.current_root).resolve()
     output_root = Path(args.output_root).resolve()
     config_path = Path(args.config).resolve()
-    clip_config_path = Path(args.clip_config).resolve()
+    classifier_config_path = Path(args.classifier_config).resolve()
     if not current_root.is_dir():
         raise FileNotFoundError(f"current root not found: {current_root}")
 
@@ -92,7 +92,7 @@ def main() -> None:
         "current_root": str(current_root),
         "output_root": str(output_root),
         "config": str(config_path),
-        "clip_config": str(clip_config_path),
+        "classifier_config": str(classifier_config_path),
         "image_count": len(samples),
         "resume": bool(args.resume),
         "completed_before_start": len(completed),
@@ -109,7 +109,7 @@ def main() -> None:
         scene=first_scene,
         current=str(first_image),
         config_path=str(config_path),
-        clip_config_path=str(clip_config_path),
+        classifier_config_path=str(classifier_config_path),
     )
 
     summary_mode = "a" if args.resume else "w"
