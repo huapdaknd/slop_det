@@ -239,6 +239,7 @@ class ClassifierLabelMappingService:
 
         transition_counts: Counter[str] = Counter()
         mapped_counts: Counter[str] = Counter()
+        all_preview_shapes: List[Dict[str, Any]] = []
         accepted_shapes: List[Dict[str, Any]] = []
         accepted_change_pixels = 0
         for batch in batched(jobs, self.batch_size):
@@ -333,8 +334,8 @@ class ClassifierLabelMappingService:
                 transition_counts[transition] += 1
                 mapped_counts[mapped_label] += 1
 
-                shape = shapes[int(job["shape_index"])]
-                source_description = shape.get("description")
+                source_shape = shapes[int(job["shape_index"])]
+                source_description = source_shape.get("description")
                 try:
                     source_metadata = json.loads(source_description or "{}")
                 except (TypeError, json.JSONDecodeError):
@@ -369,19 +370,23 @@ class ClassifierLabelMappingService:
                         ),
                     }
                 )
-                shape["label"] = mapped_label
-                shape["group_id"] = None
-                shape["description"] = (
+                classified_shape = dict(source_shape)
+                classified_shape["label"] = mapped_label
+                classified_shape["group_id"] = None
+                classified_shape["description"] = (
                     json.dumps(description, ensure_ascii=False)
                     if description
                     else None
                 )
-                shape["flags"] = shape.get("flags") or {}
+                classified_shape["flags"] = (
+                    classified_shape.get("flags") or {}
+                )
+                all_preview_shapes.append(classified_shape)
                 if (
                     not self.keep_only_alarm_labels
                     or mapped_label in self.alarm_labels
                 ):
-                    accepted_shapes.append(shape)
+                    accepted_shapes.append(classified_shape)
                     accepted_change_pixels += int(
                         source_metadata.get("change_pixels", 0) or 0
                     )
@@ -399,8 +404,7 @@ class ClassifierLabelMappingService:
             accepted_shapes = []
             accepted_change_pixels = 0
             accepted_change_ratio = 0.0
-        if self.keep_only_alarm_labels:
-            payload["shapes"] = accepted_shapes
+        payload["shapes"] = accepted_shapes
 
         payload.pop("classifier_classification", None)
         payload["imagePath"] = current_path.name
@@ -418,7 +422,7 @@ class ClassifierLabelMappingService:
         if mask_candidates:
             self._write_outline_preview(
                 current,
-                list(payload.get("shapes") or []),
+                all_preview_shapes,
                 mask_candidates[0],
             )
         base_update_recommended = any(
@@ -428,6 +432,7 @@ class ClassifierLabelMappingService:
         return {
             "json_path": str(json_path),
             "num_classified_shapes": len(jobs),
+            "num_preview_shapes": len(all_preview_shapes),
             "num_accepted_shapes": len(payload.get("shapes") or []),
             "accepted_change_pixels": accepted_change_pixels,
             "accepted_change_ratio": accepted_change_ratio,
