@@ -166,8 +166,8 @@ DEFAULT_TRANSITION_PROMPTS: Dict[str, List[str]] = {
     ],
     "no_meaningful_change": [
         "before and after images show the same hillside road and vegetation with no meaningful physical change",
-        "no important structural change between the before image and the after image",
-        "the selected region remains essentially the same scene content",
+        "no important structural change between the before image and the after image, with no clear canopy loss and no new bare slope",
+        "the selected region remains essentially the same scene content, without new exposed soil rock debris or excavation",
     ],
     "other_visual_change": [
         "before and after images show another local visual change that is not vegetation loss landslide rockfall or non-target object change",
@@ -193,6 +193,11 @@ CONTEXT_OBJECT_STATES = {
     "person",
     "construction_equipment",
     "manmade_structure",
+}
+MOVABLE_OBJECT_STATES = {
+    "vehicle",
+    "person",
+    "construction_equipment",
 }
 SLOPE_SURFACE_STATES = {
     "cleared_or_excavated_slope",
@@ -418,6 +423,10 @@ def select_view_result(context: Dict[str, Any], focused: Dict[str, Any]) -> Dict
     selected["selected_view"] = view
     selected["context_top1"] = context["raw_label"]
     selected["focused_top1"] = focused["raw_label"]
+    selected["context_score"] = context["score"]
+    selected["focused_score"] = focused["score"]
+    selected["context_margin"] = context["margin"]
+    selected["focused_margin"] = focused["margin"]
     return selected
 
 
@@ -448,6 +457,23 @@ def resolve_transition(
         for item in current_result.get("top3", [])
         if isinstance(item, Mapping)
     }
+    current_context_label = str(current_result.get("context_top1"))
+    current_focused_label = str(current_result.get("focused_top1"))
+    current_context_score = float(current_result.get("context_score", 0.0))
+    current_focused_score = float(current_result.get("focused_score", 0.0))
+    current_has_movable_object = (
+        (
+            current_context_label in MOVABLE_OBJECT_STATES
+            and current_context_score >= 0.30
+        )
+        or (
+            current_focused_label in MOVABLE_OBJECT_STATES
+            and current_focused_score >= 0.30
+        )
+        or current_top3.get("vehicle", 0.0) >= 0.18
+        or current_top3.get("construction_equipment", 0.0) >= 0.18
+        or current_top3.get("person", 0.0) >= 0.18
+    )
     if (
         pair_is_strong
         and pair_transition == "vegetation_loss_candidate"
@@ -511,9 +537,31 @@ def resolve_transition(
         pair_is_strong
         and pair_transition == "rockfall_candidate"
         and current_label == "loose_rock_or_gravel"
-        and str(current_result.get("context_top1")) == "road_surface"
+        and not current_has_movable_object
+        and current_context_label == "road_surface"
     ):
         return pair_transition, "strong_pair_classifier"
+    if pair_transition == "rockfall_candidate" and current_has_movable_object:
+        return "non_target_change", "pair_classifier"
+    if (
+        pair_transition == "no_meaningful_change"
+        and base_label in VEGETATION_STATES
+        and (
+            current_label in {
+                "cut_or_fallen_trees",
+                "cleared_or_excavated_slope",
+                "natural_landslide",
+                "exposed_rock_or_soil",
+                "loose_rock_or_gravel",
+            }
+            or current_top3.get("cut_or_fallen_trees", 0.0) >= 0.12
+            or current_top3.get("cleared_or_excavated_slope", 0.0) >= 0.20
+            or current_top3.get("natural_landslide", 0.0) >= 0.20
+            or current_top3.get("exposed_rock_or_soil", 0.0) >= 0.20
+            or current_top3.get("loose_rock_or_gravel", 0.0) >= 0.20
+        )
+    ):
+        return "vegetation_loss_candidate", "state_rule"
     if pair_transition in {
         "vegetation_loss_candidate",
         "landslide_candidate",
