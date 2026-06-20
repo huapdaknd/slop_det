@@ -28,13 +28,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-root", required=True)
     parser.add_argument(
         "--config",
-        default=str(PROJECT_ROOT / "config" / "model_config_rolling_base.json"),
+        default=str(PROJECT_ROOT / "config" / "model_config.json"),
     )
     parser.add_argument(
         "--classifier-config",
-        default=str(
-            PROJECT_ROOT / "config" / "classifier_label_config_alarm_only.json"
-        ),
+        default=str(PROJECT_ROOT / "config" / "classifier_label_config.json"),
     )
     parser.add_argument("--expected-images", type=int, default=0)
     parser.add_argument("--min-free-gb", type=float, default=8.0)
