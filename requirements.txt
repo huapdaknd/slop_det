@@ -9,3 +9,4 @@ pillow
 timm
 einops
 ultralytics
+open_clip_torch

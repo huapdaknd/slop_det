@@ -12,6 +12,7 @@ import torch
 
 from .classifier import PairBinaryRoiClassifier, PairChangeClassifier
 from .gescf import GeSCF
+from .pair_change_backend import PairChangeSegBackend
 from .veg_infer import VegetationCoverageService
 from .yolo_infer import YoloDetectionService
 
@@ -44,9 +45,19 @@ class DetectorConfig:
     output_root: str
     base_roi_root: str = ""
     vegetation_config: str = ""
+    proposal_backend: str = "gescf"
     classifier_ckpt: str = ""
     binary_classifier_ckpt: str = ""
     mobile_sam_ckpt: str = ""
+    pair_change_checkpoint: str = ""
+    pair_change_device: str = "cuda:0"
+    pair_change_decoder_arch: str = "auto"
+    pair_change_inference_mode: str = "sliding"
+    pair_change_crop_size: int = 1536
+    pair_change_stride: int = 768
+    pair_change_threshold: float = 0.5
+    pair_change_open_kernel: int = 3
+    pair_change_close_kernel: int = 5
     sam_vit_h_ckpt: str = ""
     superpoint_ckpt: str = ""
     classifier_device: str = "auto"
@@ -143,6 +154,7 @@ class OnlineChangeService:
         self.classifier_ckpt = self._resolve_path(config.classifier_ckpt) if config.classifier_ckpt else None
         self.binary_classifier_ckpt = self._resolve_path(config.binary_classifier_ckpt) if config.binary_classifier_ckpt else None
         self.mobile_sam_ckpt = self._resolve_path(config.mobile_sam_ckpt) if config.mobile_sam_ckpt else None
+        self.pair_change_checkpoint = self._resolve_path(config.pair_change_checkpoint) if config.pair_change_checkpoint else None
         self.sam_vit_h_ckpt = self._resolve_path(config.sam_vit_h_ckpt) if config.sam_vit_h_ckpt else None
         self.superpoint_ckpt = self._resolve_path(config.superpoint_ckpt) if config.superpoint_ckpt else None
         self.yolo_config = self._resolve_path(config.yolo_config) if config.yolo_config else None
@@ -222,6 +234,22 @@ class OnlineChangeService:
         return model
 
     def _build_mask_backend(self):
+        backend_name = str(self.config.proposal_backend).strip().lower()
+        if backend_name in {"pair_change_seg", "pair_change", "mobile_sam_pair"}:
+            checkpoint_path = self.pair_change_checkpoint
+            if checkpoint_path is None:
+                raise FileNotFoundError("pair_change_checkpoint is required for proposal_backend=pair_change_seg")
+            return PairChangeSegBackend(
+                checkpoint_path=checkpoint_path,
+                device=self.config.pair_change_device,
+                decoder_arch=self.config.pair_change_decoder_arch,
+                inference_mode=self.config.pair_change_inference_mode,
+                crop_size=self.config.pair_change_crop_size,
+                stride=self.config.pair_change_stride,
+                threshold=self.config.pair_change_threshold,
+                open_kernel=self.config.pair_change_open_kernel,
+                close_kernel=self.config.pair_change_close_kernel,
+            )
         return self._build_gescf()
 
     def _build_classifier(self):
@@ -244,6 +272,7 @@ class OnlineChangeService:
             ckpt_path=str(self.classifier_ckpt),
             device=self.config.classifier_device,
             mobile_sam_ckpt=str(self.mobile_sam_ckpt) if self.mobile_sam_ckpt else None,
+            sam_vit_h_ckpt=str(self.sam_vit_h_ckpt) if self.sam_vit_h_ckpt else None,
             roi_view_mode=roi_view_mode,
             roi_crop_context_ratio=roi_crop_context_ratio,
             roi_crop_min_context=roi_crop_min_context,
@@ -269,6 +298,7 @@ class OnlineChangeService:
             ckpt_path=str(self.binary_classifier_ckpt),
             device=self.config.binary_classifier_device,
             mobile_sam_ckpt=str(self.mobile_sam_ckpt) if self.mobile_sam_ckpt else None,
+            sam_vit_h_ckpt=str(self.sam_vit_h_ckpt) if self.sam_vit_h_ckpt else None,
             roi_view_mode=roi_view_mode,
             roi_crop_context_ratio=roi_crop_context_ratio,
             roi_crop_min_context=roi_crop_min_context,
@@ -343,15 +373,11 @@ class OnlineChangeService:
             raise RuntimeError(f"Expected 1 base image in {scene_dir}, found {len(images)}")
         return images[0]
 
-    def _next_output_dir(self, scene_name: str) -> Path:
+    def _next_output_dir(self, scene_name: str, current_stem: str) -> Path:
         scene_root = self.output_root / f"{scene_name}_images"
         scene_root.mkdir(parents=True, exist_ok=True)
-        max_idx = 0
-        for p in scene_root.iterdir():
-            if p.is_dir() and p.name.startswith("CD_") and p.name[3:].isdigit():
-                max_idx = max(max_idx, int(p.name[3:]))
-        out = scene_root / f"CD_{max_idx + 1}"
-        out.mkdir(parents=True, exist_ok=False)
+        out = scene_root / current_stem
+        out.mkdir(parents=True, exist_ok=True)
         return out
 
     def _run_mask(self, base_path: Path, current_path: Path) -> np.ndarray:
@@ -1234,6 +1260,40 @@ class OnlineChangeService:
             "class_counts": yolo_result.get("class_counts", {}),
         }
 
+    @staticmethod
+    def _render_labelme_outline_preview(
+        image_bgr: np.ndarray,
+        labelme: Dict[str, Any],
+        line_color: Tuple[int, int, int] = (0, 0, 255),
+        line_thickness: int = 4,
+    ) -> np.ndarray:
+        preview = image_bgr.copy()
+        image_height, image_width = preview.shape[:2]
+        for shape in labelme.get("shapes") or []:
+            if not isinstance(shape, dict):
+                continue
+            points = np.asarray(shape.get("points") or [], dtype=np.float32)
+            if points.shape[0] < 2:
+                continue
+            points[:, 0] = np.clip(points[:, 0], 0, image_width - 1)
+            points[:, 1] = np.clip(points[:, 1], 0, image_height - 1)
+            pts = np.round(points).astype(np.int32)
+            shape_type = str(shape.get("shape_type") or "polygon").lower()
+            if shape_type == "rectangle" and pts.shape[0] >= 2:
+                x1, y1 = pts[0].tolist()
+                x2, y2 = pts[1].tolist()
+                cv2.rectangle(preview, (x1, y1), (x2, y2), line_color, line_thickness, cv2.LINE_AA)
+            elif pts.shape[0] >= 3:
+                cv2.polylines(
+                    preview,
+                    [pts.reshape(-1, 1, 2)],
+                    True,
+                    line_color,
+                    line_thickness,
+                    cv2.LINE_AA,
+                )
+        return preview
+
     def _update_scene_base(self, scene_dir: Path, current_path: Path) -> Path:
         new_base = scene_dir / current_path.name
         if new_base.resolve() != current_path.resolve():
@@ -1262,18 +1322,13 @@ class OnlineChangeService:
 
         base = self._get_single_base(scene_dir)
         mask = self._run_mask(base, current)
-        raw_is_change, raw_change_pixels, raw_change_ratio = self._detect_change(
-            mask,
-            self.config.min_change_pixels,
-            self.config.min_change_ratio,
-        )
 
+        current_stem = current.stem
         if output_dir is None:
-            out_dir = self._next_output_dir(scene)
+            out_dir = self._next_output_dir(scene, current_stem)
         else:
             out_dir = Path(output_dir).resolve()
             out_dir.mkdir(parents=True, exist_ok=True)
-        current_stem = current.stem
         base_out = out_dir / f"{current_stem}_base{base.suffix}"
         current_out = out_dir / f"{current_stem}_current{current.suffix}"
         masked_out = out_dir / f"{current_stem}_mask{current.suffix}"
@@ -1285,12 +1340,17 @@ class OnlineChangeService:
 
         base_img = self._read_image_unicode(base, cv2.IMREAD_COLOR)
         current_img = self._read_image_unicode(current, cv2.IMREAD_COLOR)
-        mask_orig = self._unletterbox_mask((mask > 0).astype(np.uint8), (current_img.shape[0], current_img.shape[1]))
+        backend_name = str(self.config.proposal_backend).strip().lower()
+        if backend_name in {"pair_change_seg", "pair_change", "mobile_sam_pair"}:
+            mask_orig = (mask > 0).astype(np.uint8)
+        else:
+            mask_orig = self._unletterbox_mask((mask > 0).astype(np.uint8), (current_img.shape[0], current_img.shape[1]))
+        raw_is_change, raw_change_pixels, raw_change_ratio = self._detect_change(
+            mask_orig,
+            self.config.min_change_pixels,
+            self.config.min_change_ratio,
+        )
         roi_mask = self._load_base_roi_mask(scene, current_img.shape[0], current_img.shape[1])
-        if write_mask_image:
-            overlay = current_img.copy()
-            overlay[mask_orig == 1] = [0, 0, 255]
-            self._write_image_unicode(masked_out, overlay)
 
         veg_metrics = self._compute_vegetation_coverage_metrics(
             scene=scene,
@@ -1312,11 +1372,14 @@ class OnlineChangeService:
         if veg_metrics is not None:
             labelme["vegetation_metrics"] = veg_metrics
 
-        scaled_min_change_pixels = self._scale_min_pixels_for_image_size(
-            min_pixels=self.config.min_change_pixels,
-            source_image_size=mask.size,
-            target_image_size=mask_orig.size,
-        )
+        if backend_name in {"pair_change_seg", "pair_change", "mobile_sam_pair"}:
+            scaled_min_change_pixels = int(self.config.min_change_pixels)
+        else:
+            scaled_min_change_pixels = self._scale_min_pixels_for_image_size(
+                min_pixels=self.config.min_change_pixels,
+                source_image_size=mask.size,
+                target_image_size=mask_orig.size,
+            )
         is_change, change_pixels, change_ratio = self._detect_change_from_exported_shapes(
             labelme=labelme,
             image_size=mask_orig.size,
@@ -1340,10 +1403,13 @@ class OnlineChangeService:
             self._append_yolo_to_labelme(labelme, yolo_result)
         with json_out.open("w", encoding="utf-8") as f:
             json.dump(labelme, f, ensure_ascii=False, indent=2)
+        if write_mask_image:
+            preview = self._render_labelme_outline_preview(current_img, labelme)
+            self._write_image_unicode(masked_out, preview)
 
         result = {
             "scene": scene,
-            "proposal_backend": "gescf",
+            "proposal_backend": backend_name or "gescf",
             "base_before": str(base),
             "current": str(current),
             "change": int(is_change),

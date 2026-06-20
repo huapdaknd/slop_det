@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Dict, Optional
 
+from .classifier_label_infer import ClassifierLabelMappingService
 from .diff_yolo_infer import DiffYoloClassificationService
 from .model_infer import OnlineChangeService
 from .veg_infer import VegetationCoverageService
@@ -15,11 +16,13 @@ class SlopDetService:
         cd_config_path: Optional[str] = None,
         veg_config_path: Optional[str] = None,
         yolo_config_path: Optional[str] = None,
+        classifier_config_path: Optional[str] = None,
     ) -> None:
         root = Path(__file__).resolve().parents[1]
         default_cd = root / "config" / "model_config.json"
         default_veg = root / "config" / "vegetation_config.json"
         default_yolo = root / "config" / "model_config_yolo.json"
+        default_classifier = root / "config" / "classifier_label_config.json"
 
         self.cd_config_path = str(Path(cd_config_path).resolve()) if cd_config_path else str(default_cd.resolve())
         self.veg_config_path = (
@@ -28,10 +31,16 @@ class SlopDetService:
         self.yolo_config_path = (
             str(Path(yolo_config_path).resolve()) if yolo_config_path else str(default_yolo.resolve())
         )
+        self.classifier_config_path = (
+            str(Path(classifier_config_path).resolve())
+            if classifier_config_path
+            else str(default_classifier.resolve())
+        )
         self._cd_service: Optional[OnlineChangeService] = None
         self._veg_service: Optional[VegetationCoverageService] = None
         self._yolo_service: Optional[YoloDetectionService] = None
         self._diff_yolo_service: Optional[DiffYoloClassificationService] = None
+        self._classifier_label_service: Optional[ClassifierLabelMappingService] = None
 
     def _get_cd_service(self) -> OnlineChangeService:
         if self._cd_service is None:
@@ -47,6 +56,13 @@ class SlopDetService:
         if self._yolo_service is None:
             self._yolo_service = YoloDetectionService.from_config_file(self.yolo_config_path)
         return self._yolo_service
+
+    def _get_classifier_label_service(self) -> ClassifierLabelMappingService:
+        if self._classifier_label_service is None:
+            self._classifier_label_service = ClassifierLabelMappingService.from_config_file(
+                self.classifier_config_path
+            )
+        return self._classifier_label_service
 
     def _get_diff_yolo_service(
         self,
@@ -77,21 +93,19 @@ class SlopDetService:
         min_overlap_pixels: int = 100,
         run_yolo_when_no_change: bool = False,
     ) -> Dict:
-        """Compatibility entrypoint used by existing integrations.
-
-        The slim runtime's default pipeline is now edge + vegetation metrics +
-        YOLO boxes that overlap the red change mask. The write flags are kept
-        for old callers; this pipeline always writes the four LabelMe files.
-        """
-        _ = (write_base_current, write_mask_image)
-        return self.run_diff_yolo(
+        """Run MobileSAM change segmentation, then classify change polygons."""
+        _ = (
+            min_overlap_ratio,
+            min_overlap_pixels,
+            run_yolo_when_no_change,
+        )
+        return self.run_classifier(
             scene=scene,
             current=current,
             output_dir=output_dir,
             update_base=update_base,
-            min_overlap_ratio=min_overlap_ratio,
-            min_overlap_pixels=min_overlap_pixels,
-            run_yolo_when_no_change=run_yolo_when_no_change,
+            write_base_current=write_base_current,
+            write_mask_image=write_mask_image,
         )
 
     def run_edge(
@@ -131,6 +145,55 @@ class SlopDetService:
             write_base_current=write_base_current,
             save_debug_images=save_debug_images,
         )
+
+    def run_classifier(
+        self,
+        scene: str,
+        current: str,
+        output_dir: Optional[str] = None,
+        update_base: Optional[bool] = None,
+        write_base_current: bool = True,
+        write_mask_image: bool = True,
+    ) -> Dict:
+        """Write the four edge files, then replace polygon labels with classifier mappings."""
+        cd_service = self._get_cd_service()
+        result = cd_service.process(
+            scene=scene,
+            current_path=current,
+            update_base=False,
+            output_dir=output_dir,
+            write_base_current=write_base_current,
+            write_mask_image=write_mask_image,
+        )
+        classifier_result = self._get_classifier_label_service().process_output(
+            str(result["output_dir"])
+        )
+        result["classifier_classification"] = classifier_result
+        result["json_shapes"] = int(classifier_result["num_accepted_shapes"])
+        result["change_pixels"] = int(
+            classifier_result["accepted_change_pixels"]
+        )
+        result["change_ratio"] = float(
+            classifier_result["accepted_change_ratio"]
+        )
+        result["change"] = int(result["json_shapes"] > 0)
+        should_update = (
+            bool(cd_service.config.update_base_on_change)
+            if update_base is None
+            else bool(update_base)
+        )
+        do_update = should_update
+        result["base_update_policy"] = "always_after_detection"
+        result["base_update_recommended"] = int(should_update)
+        result["base_updated"] = int(do_update)
+        if do_update:
+            scene_dir = cd_service.data_root / scene
+            base_after = cd_service._update_scene_base(
+                scene_dir,
+                Path(current).resolve(),
+            )
+            result["base_after"] = str(base_after)
+        return result
 
     def run_diff_yolo(
         self,
