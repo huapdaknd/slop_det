@@ -21,10 +21,10 @@ python tools/run_alarm_rolling_base_classifier.py \
   --expected-images 84
 ```
 
-The default configs are:
+The default configs are the normal `edge_example.py` configs:
 
-- `config/model_config_rolling_base.json`
-- `config/classifier_label_config_alarm_only.json`
+- `config/model_config.json`
+- `config/classifier_label_config.json`
 
 For repeatable evaluations, restore the desired `base_data` snapshot before running,
 because this path intentionally changes `base_data`.
