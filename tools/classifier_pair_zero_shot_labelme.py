@@ -60,8 +60,9 @@ DEFAULT_STATE_PROMPTS: Dict[str, List[str]] = {
     "dry_or_leafless_vegetation": [
         "standing trees with dry sparse leaves and many visible bare branches",
         "dry or leafless vegetation where trunks remain upright and rooted in place",
-        "a hillside with dead foliage substantial leaf loss or exposed branches but no fresh cut slope",
-        "withered standing vegetation without logging debris, large fallen trunks, or obvious excavation",
+        "normal leaf fall where standing trunks and branches remain in place",
+        "a hillside with dead foliage substantial leaf loss or exposed branches but no fresh bare ground",
+        "withered standing vegetation without exposed soil expansion logging debris large fallen trunks landslide material or obvious excavation",
     ],
     "cut_or_fallen_trees": [
         "cut trees, felled trunks, and logging debris on a hillside",
@@ -69,34 +70,30 @@ DEFAULT_STATE_PROMPTS: Dict[str, List[str]] = {
         "uprooted or toppled trees lying on the ground rather than standing dry trees",
         "fresh tree fall or tree clearing with visible woody debris",
     ],
-    "cleared_or_excavated_slope": [
-        "an engineered cut slope with a smooth regular bare face beside a road",
-        "a manmade road-cut or widened slope with straight edges benches terraces or machine tracks",
-        "a mechanically cleared bare hillside with excavation marks and geometric shaping",
-        "construction excavation rather than a chaotic natural collapse or scattered rockfall",
-        "a regular cut face that looks reshaped by machinery",
+    "landslide": [
+        "a fresh muddy landslide scar with yellow brown soil exposed on a mountainside",
+        "an irregular earth slide channel running downslope with loose muddy debris at the bottom",
+        "fresh soil and colluvium flowed down a slope, forming a chute and toe deposit",
+        "a natural slope failure with muddy runout, irregular scarp, and fresh displaced earth",
+        "yellow or brown landslide material extending downhill, not a smooth engineered cut slope",
+        "a narrow or fan-shaped muddy failure path with visible downslope runout and toe accumulation",
+        "not just a bare cleared slope, but a collapse with an obvious slide track and deposited earth below",
     ],
-    "natural_landslide": [
-        "an irregular natural slope collapse with a visible head scarp and displaced earth",
-        "a chaotic unengineered slope failure with broken soil rock debris and torn vegetation",
-        "a natural landslide with a downslope movement path and material accumulated at the slope toe",
-        "an uneven collapsed hillside rather than a smooth regular machine-cut face",
-        "fresh natural failure with disrupted ground geometry and no engineered benching",
-    ],
-    "exposed_rock_or_soil": [
-        "a stable continuous exposed bedrock or bare soil surface on a hillside",
-        "an intact in-place rocky or earthy slope without a movement path or toe deposit",
-        "long-standing bare earth or rock face with no head scarp and no displaced debris",
-        "continuous in-place rock or soil rather than detached loose stones",
-        "a bare slope surface that is not obviously excavated and not an active collapse",
+    "bare_exposed_slope": [
+        "a bare exposed slope with visible rock soil or disturbed ground",
+        "an exposed hillside with little or no vegetation cover",
+        "a rocky or earthy slope surface that is largely bare and uncovered",
+        "a disturbed bare slope beside a road, regardless of whether the cause is natural or human",
+        "a large exposed slope face rather than intact green vegetation or discrete loose stones",
+        "a bare rocky or earthy slope surface without a clear muddy slide chute or downhill flow deposit",
     ],
     "loose_rock_or_gravel": [
-        "loose detached rocks and gravel scattered on a slope or road shoulder",
-        "separate angular stones and rock fragments lying on the ground",
-        "fresh small rock debris accumulated beside a mountain road",
-        "detached rocks lying on a road surface or roadside shoulder",
-        "a local cluster of loose stones at the toe of a slope, not a whole bare cut face",
-        "discrete rockfall-like debris rather than continuous exposed bedrock or soil",
+        "a small pile of newly fallen detached angular rocks on a road shoulder or at the toe of a slope",
+        "several separate visible rock blocks and stone fragments lying on top of the road or roadside surface",
+        "fresh rockfall debris made of discrete loose stones, not a continuous exposed rock face",
+        "individual boulders or angular chunks that have fallen from a slope and accumulated locally below it",
+        "loose fallen rocks that are countable as separate pieces, not ordinary gravel texture or bare soil",
+        "a concentrated deposit of detached stones on the road edge, not a machine-cut slope, construction fill, or exposed bedrock",
     ],
     "vehicle": [
         "a car pickup van or truck on a road",
@@ -133,10 +130,11 @@ DEFAULT_TRANSITION_PROMPTS: Dict[str, List[str]] = {
         "left before and right after: mechanical excavation occurred without the main evidence being loss of tree canopy",
     ],
     "vegetation_loss_candidate": [
-        "before and after images: dense vegetation changed into cut fallen or removed trees",
-        "a green vegetated slope before and clear loss of plant cover after",
+        "before and after images: dense vegetation changed into cut fallen removed or destroyed trees",
+        "a green vegetated slope before and abnormal removal of plant bodies after",
         "trees or shrubs were cleared, felled, buried, or replaced by bare soil rock or an engineered cut slope",
-        "the main change is disappearance of living vegetation, regardless of whether it was caused by clearing excavation or damage",
+        "the main change is disappearance or destruction of vegetation structure with exposed ground excavation landslide material or fallen trunks",
+        "not normal leaf fall: do not choose this when standing trunks and branches remain and no bare soil rock excavation or debris appears",
     ],
     "landslide_candidate": [
         "left before and right after: an intact natural hillside developed an irregular collapse with displaced soil and debris",
@@ -145,9 +143,10 @@ DEFAULT_TRANSITION_PROMPTS: Dict[str, List[str]] = {
         "the after image shows irregular failure rather than a smooth machine-cut slope",
     ],
     "rockfall_candidate": [
-        "before and after images: new detached rocks appeared on the road roadside shoulder or slope toe",
-        "a relatively clear roadside area before and fresh local rock debris after",
-        "the after image shows a small concentrated rockfall deposit, not a whole bare slope conversion",
+        "left before and right after: the before road shoulder or slope toe was clear, and the after image has new separate fallen rocks lying on it",
+        "left before and right after: a small local pile of angular rock blocks newly appeared below the slope or on the roadside",
+        "left before and right after: discrete detached stones appeared as a rockfall deposit, not a whole bare slope, landslide scar, excavation, or exposed bedrock face",
+        "the after image shows countable loose rock chunks on top of the surface, not road texture, construction gravel, retaining works, or general slope clearing",
     ],
     "seasonal_leaf_color_change": [
         "before and after images: intact green tree crowns changed to intact yellow red or brown seasonal foliage",
@@ -157,7 +156,8 @@ DEFAULT_TRANSITION_PROMPTS: Dict[str, List[str]] = {
     "leaf_drying_or_fall": [
         "before and after images: tree leaves became dry sparse or leafless while trunks remained standing",
         "healthy foliage before and dried leaves bare branches or substantial leaf loss after",
-        "vegetation remains standing but foliage density decreases clearly",
+        "normal leaves withered or dropped so branches are visible but vegetation remains upright and rooted",
+        "vegetation remains standing but foliage density decreases clearly, with no exposed soil rock excavation landslide material or fallen trunk debris",
     ],
     "non_target_change": [
         "before and after images show a vehicle person machine road or ordinary roadside structure change",
@@ -188,6 +188,18 @@ VEGETATION_STATES = {
     "seasonal_leaf_color",
     "dry_or_leafless_vegetation",
 }
+LEAF_BASE_STATES = {
+    "healthy_green_vegetation",
+    "seasonal_leaf_color",
+}
+LEAF_CURRENT_STATES = {
+    "seasonal_leaf_color",
+    "dry_or_leafless_vegetation",
+}
+LEAF_TRANSITIONS = {
+    "seasonal_leaf_color_change",
+    "leaf_drying_or_fall",
+}
 CONTEXT_OBJECT_STATES = {
     "vehicle",
     "person",
@@ -199,16 +211,15 @@ MOVABLE_OBJECT_STATES = {
     "person",
     "construction_equipment",
 }
-SLOPE_SURFACE_STATES = {
-    "cleared_or_excavated_slope",
-    "natural_landslide",
-    "exposed_rock_or_soil",
-}
+SLOPE_SURFACE_STATES = {"landslide", "bare_exposed_slope"}
 
 
-def load_prompts(path: str) -> Dict[str, List[str]]:
+def load_prompts(
+    path: str,
+    default_prompts: Optional[Dict[str, List[str]]] = None,
+) -> Dict[str, List[str]]:
     if not path:
-        return DEFAULT_STATE_PROMPTS
+        return default_prompts or DEFAULT_STATE_PROMPTS
     payload = read_json(resolve_path(path))
     if isinstance(payload, dict) and "classes" in payload:
         payload = payload["classes"]
@@ -430,6 +441,196 @@ def select_view_result(context: Dict[str, Any], focused: Dict[str, Any]) -> Dict
     return selected
 
 
+def _top3_scores(result: Mapping[str, Any]) -> Dict[str, float]:
+    return {
+        str(item.get("label")): float(item.get("score", 0.0))
+        for item in (result.get("top3") or [])
+        if isinstance(item, Mapping)
+    }
+
+
+def _vegetation_signal(scores: Mapping[str, float]) -> float:
+    return max(
+        float(scores.get("healthy_green_vegetation", 0.0)),
+        float(scores.get("seasonal_leaf_color", 0.0)),
+        float(scores.get("dry_or_leafless_vegetation", 0.0)),
+    )
+
+
+def _leaf_or_seasonal_signal(scores: Mapping[str, float]) -> float:
+    return max(
+        float(scores.get("seasonal_leaf_color", 0.0)),
+        float(scores.get("dry_or_leafless_vegetation", 0.0)),
+    )
+
+
+def _clear_surface_loss_signal(
+    current_label: str,
+    current_result: Mapping[str, Any],
+    current_top3: Mapping[str, float],
+) -> bool:
+    leaf_signal = _leaf_or_seasonal_signal(current_top3)
+    current_score = float(current_result.get("score", 0.0))
+    current_margin = float(current_result.get("margin", 0.0))
+    surface_score = max(
+        float(current_top3.get("bare_exposed_slope", 0.0)),
+        float(current_top3.get("landslide", 0.0)),
+        float(current_top3.get("loose_rock_or_gravel", 0.0)),
+        float(current_top3.get("cut_or_fallen_trees", 0.0)),
+    )
+    if current_label not in {
+        "bare_exposed_slope",
+        "landslide",
+        "loose_rock_or_gravel",
+        "cut_or_fallen_trees",
+    }:
+        return False
+    return (
+        current_score >= 0.50
+        and current_margin >= 0.08
+        and surface_score >= max(0.25, leaf_signal + 0.08)
+    )
+
+
+def _normal_leaf_loss_transition(
+    base_label: str,
+    current_label: str,
+    base_top3: Mapping[str, float],
+    current_top3: Mapping[str, float],
+    current_result: Mapping[str, Any],
+    pair_result: Mapping[str, Any],
+) -> Tuple[str, str] | None:
+    pair_transition = str(pair_result["label"])
+    pair_top3 = _top3_scores(pair_result)
+    base_leaf_candidate = (
+        base_label in LEAF_BASE_STATES
+        or max(
+            float(base_top3.get("healthy_green_vegetation", 0.0)),
+            float(base_top3.get("seasonal_leaf_color", 0.0)),
+        )
+        >= 0.25
+    )
+    if not base_leaf_candidate:
+        return None
+
+    current_leaf_signal = _leaf_or_seasonal_signal(current_top3)
+    pair_score = float(pair_result.get("score", 0.0))
+    pair_leaf_signal = max(
+        float(pair_top3.get("seasonal_leaf_color_change", 0.0)),
+        float(pair_top3.get("leaf_drying_or_fall", 0.0)),
+        pair_score if pair_transition in LEAF_TRANSITIONS else 0.0,
+    )
+    pair_alarm_signal = max(
+        float(pair_top3.get("vegetation_loss_candidate", 0.0)),
+        float(pair_top3.get("landslide_candidate", 0.0)),
+        float(pair_top3.get("rockfall_candidate", 0.0)),
+        pair_score
+        if pair_transition
+        in {"vegetation_loss_candidate", "landslide_candidate", "rockfall_candidate"}
+        else 0.0,
+    )
+    pair_leaf_confident = (
+        pair_transition in LEAF_TRANSITIONS
+        and pair_score >= 0.45
+        and pair_leaf_signal >= pair_alarm_signal + 0.08
+    )
+    pair_no_change_confident = (
+        pair_transition == "no_meaningful_change"
+        and pair_score >= 0.55
+        and pair_alarm_signal <= 0.20
+    )
+    if pair_leaf_confident or pair_no_change_confident:
+        if (
+            current_label == "cut_or_fallen_trees"
+            and _clear_surface_loss_signal(current_label, current_result, current_top3)
+        ):
+            return None
+        if pair_transition == "seasonal_leaf_color_change":
+            return "seasonal_leaf_color_change", "leaf_filter"
+        if pair_transition == "leaf_drying_or_fall":
+            return "leaf_drying_or_fall", "leaf_filter"
+        if current_leaf_signal >= 0.18:
+            return "leaf_drying_or_fall", "leaf_filter"
+        return "no_meaningful_change", "leaf_filter"
+
+    current_leaf_candidate = (
+        current_label in LEAF_CURRENT_STATES
+        or pair_transition in LEAF_TRANSITIONS
+        or current_leaf_signal >= 0.25
+    )
+    if not current_leaf_candidate:
+        return None
+    if _clear_surface_loss_signal(current_label, current_result, current_top3):
+        return None
+    if (
+        current_label == "seasonal_leaf_color"
+        or pair_transition == "seasonal_leaf_color_change"
+        or float(current_top3.get("seasonal_leaf_color", 0.0))
+        >= float(current_top3.get("dry_or_leafless_vegetation", 0.0)) + 0.08
+    ):
+        return "seasonal_leaf_color_change", "leaf_filter"
+    return "leaf_drying_or_fall", "leaf_filter"
+
+
+def _bare_slope_alarm_supported(
+    current_label: str,
+    current_result: Mapping[str, Any],
+    current_top3: Mapping[str, float],
+    pair_result: Mapping[str, Any],
+    min_pair_score: float,
+    min_pair_margin: float,
+) -> bool:
+    if current_label != "bare_exposed_slope":
+        return True
+    pair_transition = str(pair_result["label"])
+    pair_score = float(pair_result.get("score", 0.0))
+    pair_margin = float(pair_result.get("margin", 0.0))
+    pair_top3 = _top3_scores(pair_result)
+    pair_vegetation_loss = max(
+        float(pair_top3.get("vegetation_loss_candidate", 0.0)),
+        pair_score if pair_transition == "vegetation_loss_candidate" else 0.0,
+    )
+    pair_leaf_or_no_change = max(
+        float(pair_top3.get("seasonal_leaf_color_change", 0.0)),
+        float(pair_top3.get("leaf_drying_or_fall", 0.0)),
+        float(pair_top3.get("no_meaningful_change", 0.0)),
+        pair_score
+        if pair_transition
+        in {
+            "seasonal_leaf_color_change",
+            "leaf_drying_or_fall",
+            "no_meaningful_change",
+        }
+        else 0.0,
+    )
+    current_score = float(current_result.get("score", 0.0))
+    current_margin = float(current_result.get("margin", 0.0))
+    bare_strength = float(current_top3.get("bare_exposed_slope", 0.0))
+    vegetation_like = max(
+        float(current_top3.get("healthy_green_vegetation", 0.0)),
+        float(current_top3.get("seasonal_leaf_color", 0.0)),
+        float(current_top3.get("dry_or_leafless_vegetation", 0.0)),
+    )
+    abnormal_surface = max(
+        float(current_top3.get("landslide", 0.0)),
+        float(current_top3.get("loose_rock_or_gravel", 0.0)),
+        float(current_top3.get("cut_or_fallen_trees", 0.0)),
+    )
+    pair_supports_loss = (
+        pair_transition == "vegetation_loss_candidate"
+        and pair_score >= min_pair_score
+        and pair_margin >= min_pair_margin
+        and pair_vegetation_loss >= pair_leaf_or_no_change + 0.10
+    )
+    current_strong_bare = (
+        current_score >= 0.75
+        and current_margin >= 0.20
+        and bare_strength >= max(0.65, vegetation_like + 0.35)
+    )
+    current_abnormal_surface = abnormal_surface >= max(0.30, vegetation_like + 0.20)
+    return pair_supports_loss or (current_strong_bare and current_abnormal_surface)
+
+
 def resolve_transition(
     base_result: Mapping[str, Any],
     current_result: Mapping[str, Any],
@@ -439,8 +640,47 @@ def resolve_transition(
 ) -> Tuple[str, str]:
     base_label = str(base_result["label"])
     current_label = str(current_result["label"])
-    state_transition = transition_label(base_label, current_label)
+    base_top3 = _top3_scores(base_result)
+    current_top3 = _top3_scores(current_result)
+    base_vegetation_signal = _vegetation_signal(base_top3)
+    current_vegetation_signal = _vegetation_signal(current_top3)
     pair_transition = str(pair_result["label"])
+    bare_slope_alarm_supported = _bare_slope_alarm_supported(
+        current_label,
+        current_result,
+        current_top3,
+        pair_result,
+        min_pair_score,
+        min_pair_margin,
+    )
+
+    leaf_transition = _normal_leaf_loss_transition(
+        base_label,
+        current_label,
+        base_top3,
+        current_top3,
+        current_result,
+        pair_result,
+    )
+    if leaf_transition is not None:
+        return leaf_transition
+
+    if (
+        base_vegetation_signal >= 0.20
+        and current_vegetation_signal <= 0.12
+        and current_label in {"landslide", "bare_exposed_slope", "loose_rock_or_gravel"}
+        and bare_slope_alarm_supported
+    ):
+        return "vegetation_loss_candidate", "state_rule"
+
+    state_transition = transition_label(base_label, current_label)
+    if (
+        state_transition == "vegetation_loss_candidate"
+        and base_label in VEGETATION_STATES
+        and current_label == "bare_exposed_slope"
+        and not bare_slope_alarm_supported
+    ):
+        state_transition = "other_visual_change"
     pair_is_confident = (
         float(pair_result["score"]) >= min_pair_score
         and float(pair_result["margin"]) >= min_pair_margin
@@ -452,15 +692,29 @@ def resolve_transition(
         float(pair_result["score"]) >= max(min_pair_score, 0.75)
         and float(pair_result["margin"]) >= max(min_pair_margin, 0.30)
     )
-    current_top3 = {
-        str(item.get("label")): float(item.get("score", 0.0))
-        for item in current_result.get("top3", [])
-        if isinstance(item, Mapping)
-    }
     current_context_label = str(current_result.get("context_top1"))
     current_focused_label = str(current_result.get("focused_top1"))
     current_context_score = float(current_result.get("context_score", 0.0))
     current_focused_score = float(current_result.get("focused_score", 0.0))
+    current_landslide_strength = current_top3.get("landslide", 0.0)
+    current_bare_slope_strength = current_top3.get("bare_exposed_slope", 0.0)
+    current_surface_loss_labels = {
+        "cut_or_fallen_trees",
+        "landslide",
+        "bare_exposed_slope",
+        "loose_rock_or_gravel",
+        "road_surface",
+    }
+    significant_vegetation_drop = (
+        (base_vegetation_signal >= 0.45 and current_vegetation_signal <= 0.20)
+        or (base_vegetation_signal >= 0.25 and current_vegetation_signal <= 0.12)
+    )
+    current_landslide_is_clear = (
+        current_label == "landslide"
+        and float(current_result.get("score", 0.0)) >= 0.52
+        and float(current_result.get("margin", 0.0)) >= 0.12
+        and current_landslide_strength >= max(0.35, current_bare_slope_strength + 0.10)
+    )
     current_has_movable_object = (
         (
             current_context_label in MOVABLE_OBJECT_STATES
@@ -481,26 +735,23 @@ def resolve_transition(
         and (
             current_label in {
                 "cut_or_fallen_trees",
-                "exposed_rock_or_soil",
+                "landslide",
                 "loose_rock_or_gravel",
             }
             or current_top3.get("cut_or_fallen_trees", 0.0) >= 0.15
-            or current_top3.get("exposed_rock_or_soil", 0.0) >= 0.25
+            or current_top3.get("landslide", 0.0) >= 0.20
             or current_top3.get("loose_rock_or_gravel", 0.0) >= 0.25
+            or (current_label == "bare_exposed_slope" and bare_slope_alarm_supported)
         )
     ):
         return pair_transition, "strong_pair_classifier"
 
     if (
         pair_transition == "vegetation_loss_candidate"
-        and str(current_result.get("context_top1")) == "cleared_or_excavated_slope"
-        and str(current_result.get("focused_top1")) in {
-            "cleared_or_excavated_slope",
-            "exposed_rock_or_soil",
-            "natural_landslide",
-        }
+        and str(current_result.get("context_top1")) == "bare_exposed_slope"
+        and str(current_result.get("focused_top1")) in {"bare_exposed_slope"}
     ):
-        if base_label in VEGETATION_STATES:
+        if base_label in VEGETATION_STATES and bare_slope_alarm_supported:
             return "vegetation_loss_candidate", "pair_classifier"
         return "other_visual_change", "pair_classifier"
     if (
@@ -508,18 +759,16 @@ def resolve_transition(
         and base_label in VEGETATION_STATES
         and current_label in {
             UNKNOWN_STATE,
-            "cleared_or_excavated_slope",
-            "exposed_rock_or_soil",
-            "natural_landslide",
+            "landslide",
+            "bare_exposed_slope",
             "loose_rock_or_gravel",
         }
     ):
         return "vegetation_loss_candidate", "pair_classifier"
     if pair_transition == "construction_clearing" and current_label in {
         UNKNOWN_STATE,
-        "cleared_or_excavated_slope",
-        "exposed_rock_or_soil",
-        "natural_landslide",
+        "landslide",
+        "bare_exposed_slope",
         "loose_rock_or_gravel",
     }:
         return "other_visual_change", "pair_classifier"
@@ -527,12 +776,35 @@ def resolve_transition(
         pair_is_strong
         and pair_transition == "landslide_candidate"
         and current_label in {
-            "natural_landslide",
-            "exposed_rock_or_soil",
+            "landslide",
+            "bare_exposed_slope",
             "loose_rock_or_gravel",
         }
     ):
-        return pair_transition, "strong_pair_classifier"
+        if current_label == "landslide":
+            if base_label in VEGETATION_STATES and not current_landslide_is_clear:
+                return "vegetation_loss_candidate", "pair_classifier"
+            if base_label in {
+                "landslide",
+                "bare_exposed_slope",
+                "loose_rock_or_gravel",
+                "manmade_structure",
+            }:
+                return state_transition, "state_rule"
+            if not current_landslide_is_clear:
+                return state_transition, "state_rule"
+            return pair_transition, "strong_pair_classifier"
+        if current_label == "bare_exposed_slope":
+            if (
+                base_label in VEGETATION_STATES
+                and significant_vegetation_drop
+                and bare_slope_alarm_supported
+            ):
+                return "vegetation_loss_candidate", "pair_classifier"
+            return "other_visual_change", "pair_classifier"
+        if base_label in VEGETATION_STATES and significant_vegetation_drop:
+            return "vegetation_loss_candidate", "pair_classifier"
+        return state_transition, "state_rule"
     if (
         pair_is_strong
         and pair_transition == "rockfall_candidate"
@@ -543,23 +815,28 @@ def resolve_transition(
         return pair_transition, "strong_pair_classifier"
     if pair_transition == "rockfall_candidate" and current_has_movable_object:
         return "non_target_change", "pair_classifier"
+    if pair_transition == "rockfall_candidate" and base_label in {
+        "landslide",
+        "bare_exposed_slope",
+        "loose_rock_or_gravel",
+    }:
+        return state_transition, "state_rule"
+    if pair_transition == "rockfall_candidate":
+        return state_transition, "state_rule"
+    if pair_transition == "landslide_candidate":
+        return state_transition, "state_rule"
+    if (
+        pair_transition == "vegetation_loss_candidate"
+        and current_label == "bare_exposed_slope"
+        and not bare_slope_alarm_supported
+    ):
+        return state_transition, "state_rule"
     if (
         pair_transition == "no_meaningful_change"
         and base_label in VEGETATION_STATES
-        and (
-            current_label in {
-                "cut_or_fallen_trees",
-                "cleared_or_excavated_slope",
-                "natural_landslide",
-                "exposed_rock_or_soil",
-                "loose_rock_or_gravel",
-            }
-            or current_top3.get("cut_or_fallen_trees", 0.0) >= 0.12
-            or current_top3.get("cleared_or_excavated_slope", 0.0) >= 0.20
-            or current_top3.get("natural_landslide", 0.0) >= 0.20
-            or current_top3.get("exposed_rock_or_soil", 0.0) >= 0.20
-            or current_top3.get("loose_rock_or_gravel", 0.0) >= 0.20
-        )
+        and significant_vegetation_drop
+        and current_label in current_surface_loss_labels
+        and bare_slope_alarm_supported
     ):
         return "vegetation_loss_candidate", "state_rule"
     if pair_transition in {
@@ -593,21 +870,20 @@ def transition_label(base_label: str, current_label: str) -> str:
     if (
         base_label in VEGETATION_STATES
         and current_label in {
-            "cleared_or_excavated_slope",
-            "natural_landslide",
-            "exposed_rock_or_soil",
+            "landslide",
+            "bare_exposed_slope",
             "loose_rock_or_gravel",
         }
     ):
         return "vegetation_loss_candidate"
-    if current_label == "cleared_or_excavated_slope" and base_label != "cleared_or_excavated_slope":
+    if current_label == "landslide" and base_label != "landslide":
+        return "other_visual_change"
+    if current_label == "bare_exposed_slope" and base_label != "bare_exposed_slope":
         return "other_visual_change"
     if current_label == "cut_or_fallen_trees" and base_label != "cut_or_fallen_trees":
         return "vegetation_loss_candidate"
-    if current_label == "natural_landslide" and base_label != "natural_landslide":
-        return "landslide_candidate"
-    if current_label == "loose_rock_or_gravel" and base_label not in {"loose_rock_or_gravel", "natural_landslide"}:
-        return "rockfall_candidate"
+    if current_label == "loose_rock_or_gravel" and base_label not in {"loose_rock_or_gravel", "bare_exposed_slope", "landslide"}:
+        return "other_visual_change"
     if (
         current_label == "seasonal_leaf_color"
         and base_label != "seasonal_leaf_color"
@@ -618,6 +894,10 @@ def transition_label(base_label: str, current_label: str) -> str:
         and base_label not in {"dry_or_leafless_vegetation", "cut_or_fallen_trees"}
     ):
         return "leaf_drying_or_fall"
+    if base_label in VEGETATION_STATES and current_label in VEGETATION_STATES:
+        if base_label != current_label:
+            return "seasonal_leaf_color_change"
+        return "no_meaningful_change"
     if base_label in NON_TARGET_STATES or current_label in NON_TARGET_STATES:
         if base_label == current_label:
             return "no_meaningful_change"
@@ -787,12 +1067,17 @@ def crop_pair(
 def focus_polygon(crop: np.ndarray, rel_points: np.ndarray) -> np.ndarray:
     polygon = np.round(rel_points).astype(np.int32)
     if len(polygon) < 3:
-        return crop
+        return crop.copy()
     mask = np.zeros(crop.shape[:2], dtype=np.uint8)
     cv2.fillPoly(mask, [polygon], 255)
-    blurred = cv2.GaussianBlur(crop, (0, 0), sigmaX=18, sigmaY=18)
-    background = cv2.addWeighted(blurred, 0.25, np.full_like(crop, 127), 0.75, 0)
-    return np.where(mask[..., None] > 0, crop, background)
+    softened = cv2.addWeighted(
+        crop,
+        0.62,
+        np.full_like(crop, 150),
+        0.38,
+        0,
+    )
+    return np.where(mask[..., None] > 0, crop, softened)
 
 
 def write_results_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
@@ -844,15 +1129,16 @@ def run(args: argparse.Namespace) -> None:
         if model_dir_arg.is_absolute()
         else (project_root() / model_dir_arg).absolute()
     )
-    prompts = load_prompts(args.prompts)
+    prompts = load_prompts(args.prompts, DEFAULT_STATE_PROMPTS)
     device = torch.device(args.device)
     open_clip, model, preprocess = load_model(model_dir, device, args.precision)
     state_labels, text_features = encode_text(
         open_clip, model, device, prompts
     )
+    transition_prompts = load_prompts(args.transition_prompts, DEFAULT_TRANSITION_PROMPTS)
     transition_labels, transition_prompt_labels, transition_text_features = (
         encode_prompt_ensemble(
-        open_clip, model, device, DEFAULT_TRANSITION_PROMPTS
+            open_clip, model, device, transition_prompts
         )
     )
 
@@ -984,7 +1270,7 @@ def run(args: argparse.Namespace) -> None:
                 transition == "construction_clearing"
                 and current_result["label"] == UNKNOWN_STATE
             ):
-                current_result["display_label"] = "cleared_or_excavated_slope [pair]"
+                current_result["display_label"] = "bare_exposed_slope [pair]"
             group = risk_group(
                 transition,
                 float(base_result["margin"]),
@@ -1152,6 +1438,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-root", required=True)
     parser.add_argument("--model-dir", default="models/classifier/zero_shot_vit_l14")
     parser.add_argument("--prompts", default="")
+    parser.add_argument("--transition-prompts", default="")
     parser.add_argument("--device", default="cuda:2")
     parser.add_argument("--precision", default="fp16", choices=["fp32", "fp16", "bf16"])
     parser.add_argument("--batch-size", type=int, default=32)
