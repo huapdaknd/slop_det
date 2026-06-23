@@ -136,6 +136,13 @@ DEFAULT_TRANSITION_PROMPTS: Dict[str, List[str]] = {
         "the main change is disappearance or destruction of vegetation structure with exposed ground excavation landslide material or fallen trunks",
         "not normal leaf fall: do not choose this when standing trunks and branches remain and no bare soil rock excavation or debris appears",
     ],
+    "vegetation_gain_candidate": [
+        "before and after images: a bare exposed slope became covered by new green vegetation",
+        "vegetation increased on the slope after the earlier image showed bare soil rock landslide material or a cleared cut face",
+        "new grass shrubs or tree canopy appeared and covered a previously exposed or disturbed hillside surface",
+        "the main change is vegetation recovery or plant growth replacing bare ground rock or a cleared slope",
+        "do not choose this for only lighting changes, seasonal color changes, vehicles, road surface, or unchanged forest",
+    ],
     "landslide_candidate": [
         "left before and right after: an intact natural hillside developed an irregular collapse with displaced soil and debris",
         "left before and right after: a new head scarp movement path and chaotic landslide deposit appeared",
@@ -187,6 +194,16 @@ VEGETATION_STATES = {
     "healthy_green_vegetation",
     "seasonal_leaf_color",
     "dry_or_leafless_vegetation",
+}
+VEGETATION_GAIN_CURRENT_STATES = {
+    "healthy_green_vegetation",
+    "seasonal_leaf_color",
+}
+VEGETATION_GAIN_BASE_STATES = {
+    "landslide",
+    "bare_exposed_slope",
+    "loose_rock_or_gravel",
+    "cut_or_fallen_trees",
 }
 LEAF_BASE_STATES = {
     "healthy_green_vegetation",
@@ -457,6 +474,13 @@ def _vegetation_signal(scores: Mapping[str, float]) -> float:
     )
 
 
+def _green_vegetation_signal(scores: Mapping[str, float]) -> float:
+    return max(
+        float(scores.get("healthy_green_vegetation", 0.0)),
+        float(scores.get("seasonal_leaf_color", 0.0)),
+    )
+
+
 def _leaf_or_seasonal_signal(scores: Mapping[str, float]) -> float:
     return max(
         float(scores.get("seasonal_leaf_color", 0.0)),
@@ -644,6 +668,7 @@ def resolve_transition(
     current_top3 = _top3_scores(current_result)
     base_vegetation_signal = _vegetation_signal(base_top3)
     current_vegetation_signal = _vegetation_signal(current_top3)
+    current_green_signal = _green_vegetation_signal(current_top3)
     pair_transition = str(pair_result["label"])
     bare_slope_alarm_supported = _bare_slope_alarm_supported(
         current_label,
@@ -664,6 +689,14 @@ def resolve_transition(
     )
     if leaf_transition is not None:
         return leaf_transition
+
+    if (
+        base_label in VEGETATION_GAIN_BASE_STATES
+        and current_label in VEGETATION_GAIN_CURRENT_STATES
+        and current_green_signal >= 0.25
+        and current_vegetation_signal >= base_vegetation_signal + 0.10
+    ):
+        return "vegetation_gain_candidate", "state_rule"
 
     if (
         base_vegetation_signal >= 0.20
@@ -745,6 +778,20 @@ def resolve_transition(
         )
     ):
         return pair_transition, "strong_pair_classifier"
+
+    if (
+        pair_transition == "vegetation_gain_candidate"
+        and current_label in VEGETATION_GAIN_CURRENT_STATES
+        and current_green_signal >= 0.25
+        and (
+            base_label in VEGETATION_GAIN_BASE_STATES
+            or float(base_top3.get("bare_exposed_slope", 0.0)) >= 0.20
+            or float(base_top3.get("landslide", 0.0)) >= 0.20
+            or float(base_top3.get("loose_rock_or_gravel", 0.0)) >= 0.20
+            or float(base_top3.get("cut_or_fallen_trees", 0.0)) >= 0.20
+        )
+    ):
+        return pair_transition, "pair_classifier"
 
     if (
         pair_transition == "vegetation_loss_candidate"
@@ -841,6 +888,7 @@ def resolve_transition(
         return "vegetation_loss_candidate", "state_rule"
     if pair_transition in {
         "vegetation_loss_candidate",
+        "vegetation_gain_candidate",
         "landslide_candidate",
         "rockfall_candidate",
         "seasonal_leaf_color_change",
@@ -867,6 +915,11 @@ def transition_label(base_label: str, current_label: str) -> str:
         return "uncertain_change"
     if current_label == "construction_equipment":
         return "construction_activity"
+    if (
+        base_label in VEGETATION_GAIN_BASE_STATES
+        and current_label in VEGETATION_GAIN_CURRENT_STATES
+    ):
+        return "vegetation_gain_candidate"
     if (
         base_label in VEGETATION_STATES
         and current_label in {
@@ -924,7 +977,12 @@ def risk_group(
         and pair_margin < min_pair_margin
     ):
         return "review"
-    if transition in {"vegetation_loss_candidate", "landslide_candidate", "rockfall_candidate"}:
+    if transition in {
+        "vegetation_loss_candidate",
+        "vegetation_gain_candidate",
+        "landslide_candidate",
+        "rockfall_candidate",
+    }:
         return "alarm"
     if transition in {
         "non_target_change",

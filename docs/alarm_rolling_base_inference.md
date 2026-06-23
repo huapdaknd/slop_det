@@ -8,6 +8,7 @@ Behavior:
 - After every processed image, update that scene's base to the current image.
 - Keep only alarm labels in output LabelMe JSON:
   - `vegetation_loss`
+  - `vegetation_gain`
   - `rock_fall`
   - `landslide`
 - Clear the accepted output shapes when the accepted alarm area ratio is below `0.005`.

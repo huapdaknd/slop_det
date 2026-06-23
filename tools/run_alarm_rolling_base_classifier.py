@@ -80,7 +80,7 @@ def main() -> None:
         "image_count": len(samples),
         "base_update_policy": "always_after_each_detection",
         "update_base_argument": True,
-        "alarm_labels": ["landslide", "rock_fall", "vegetation_loss"],
+        "alarm_labels": ["landslide", "rock_fall", "vegetation_loss", "vegetation_gain"],
         "min_alarm_area_ratio": 0.005,
         "keep_only_alarm_labels": True,
     }

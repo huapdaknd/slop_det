@@ -75,7 +75,7 @@ class ClassifierLabelMappingService:
             str(label).strip()
             for label in (
                 alarm_labels
-                or ["landslide", "rock_fall", "vegetation_loss"]
+                or ["landslide", "rock_fall", "vegetation_loss", "vegetation_gain"]
             )
             if str(label).strip()
         }
@@ -140,7 +140,7 @@ class ClassifierLabelMappingService:
             ),
             alarm_labels=list(
                 payload.get("alarm_labels")
-                or ["landslide", "rock_fall", "vegetation_loss"]
+                or ["landslide", "rock_fall", "vegetation_loss", "vegetation_gain"]
             ),
             label_map=payload.get("label_map") or {},
             base_update_labels=list(payload.get("base_update_labels") or []),
